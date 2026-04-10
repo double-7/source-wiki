@@ -1,0 +1,7 @@
+{
+  "name": "source-wiki",
+  "version": "0.1.0",
+  "description": "将源码快速映射为结构化 wiki 知识库。利用大模型加速处理，推动知识持续积累与复用；人负责审核校正，保持专注与方向。",
+  "license": "Apache-2.0",
+  "skills": "./skills/"
+}
