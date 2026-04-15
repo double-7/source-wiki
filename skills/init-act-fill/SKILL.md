@@ -1,9 +1,8 @@
 ---
-name: sw:fill
+name: sw:init-act-fill
 description: "深度分析指定模块源码，生成 wiki 页面"
 argument-hint: "[module-name]"
 user-invocable: false
-disable-model-invocation: true
 context: fork
 agent: wiki-maintainer
 ---
@@ -36,19 +35,31 @@ agent: wiki-maintainer
 - **Tier 2**（2-3 turn）：选择性读取最复杂的 2-3 个文件（导出最多、被引用最多的）
 - **跳过**：工具函数、简单 CRUD、样板代码、vendor 代码、生成代码
 
-### 3. 创建页面
+### 3. 提取 guidelines
+
+从源码分析中识别明确的设计决策，写入 module 和 feature 页面的 guidelines 字段：
+
+识别范围：
+- 架构选择（如 "事件驱动" / "请求-响应"）
+- 模块间通信约定（如 "跨模块调用通过 interface"）
+- 数据约束（如 "所有 entity 有 createdAt/updatedAt"）
+- 命名约定（如 "handler 函数以 handle 开头"）
+
+每条 guideline 一句话，记录"为什么这样做"而非"具体文本是什么"。仅提取代码中明确体现的决策，不推断设计意图。
+
+### 4. 创建页面
 
 - 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 和 `${CLAUDE_PLUGIN_ROOT}/templates/module.md` 获取页面结构
-- 创建 feature 页面（遵循 Feature 粒度边界规则）
-- 填充 module 页面详细内容
+- 创建 feature 页面（遵循 Feature 粒度边界规则，包含提取到的 guidelines）
+- 填充 module 页面详细内容（包含提取到的 guidelines）
 - 不确定 feature 边界时，宁可创建稍大的页面，备注"可能需要拆分"
 
-### 4. 自检
+### 5. 自检
 
 - 回读刚创建的页面，确认描述与源码签名一致
 - 只检查本模块内部一致性
 
-### 5. 更新状态
+### 6. 更新状态
 
 **更新 wiki.json**：
 - 将完成的模块从 `process.pendingModules` 移入 `process.completedModules`
@@ -60,7 +71,7 @@ agent: wiki-maintainer
 
 **更新 index.md**：添加新页面条目
 
-### 6. 返回摘要
+### 7. 返回摘要
 
 返回以下格式的摘要（严格按此格式）：
 

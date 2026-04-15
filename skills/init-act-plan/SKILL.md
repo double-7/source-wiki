@@ -1,9 +1,8 @@
 ---
-name: sw:plan
+name: sw:init-act-plan
 description: "扫描源码元数据，制定模块划分方案，生成 wiki 骨架"
 argument-hint: "[source-path]"
 user-invocable: false
-disable-model-invocation: true
 context: fork
 agent: wiki-maintainer
 ---

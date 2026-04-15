@@ -1,8 +1,7 @@
 ---
-name: sw:refine
+name: sw:init-act-refine
 description: "跨模块一致性检查，创建 flow 页面，完善 overview"
 user-invocable: false
-disable-model-invocation: true
 context: fork
 agent: wiki-maintainer
 ---

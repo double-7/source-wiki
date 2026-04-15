@@ -45,17 +45,18 @@ claude --plugin-dir /path/to/source-wiki
 /sw:init src/
 ```
 
-### `/sw:ingest [source-path]`
+### `/sw:ingest`
 
-增量同步 wiki 与源码变更。自主运行，无需用户交互。
+增量同步 wiki 与源码变更。检测变更后会展示影响分析供用户确认，确认后自主处理。
 
 - 要求 wiki 已通过 `/init` 完成全量构建
-- 通过 git diff 检测源码变化，更新受影响的 wiki 页面
-- 自动创建、更新或删除对应的 wiki 页面
+- **要求项目使用 git**：通过 git diff 检测源码变化，非 git 项目不支持
+- 构建四级影响图（直接/关联/流程/约定），用户确认后逐个处理
+- 自动更新受影响的 wiki 页面，对低置信度变更标注审查建议
 
 ```bash
 # 源码变更后同步 wiki
-/sw:ingest src/
+/sw:ingest
 ```
 
 Wiki 输出目录：`docs/wiki/`

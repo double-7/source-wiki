@@ -4,7 +4,6 @@ description: "阶段式全量分析：Plan → Fill → Refine。自动检测状
 argument-hint: "[source-path]"
 user-invocable: true
 disable-model-invocation: true
-context: user
 ---
 
 阶段式全量初始化——从源码构建完整的 wiki 知识库。
@@ -43,11 +42,11 @@ ${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md
 
 ## Plan 阶段 — 委派
 
-通过 Skill tool 调用 `sw:plan`，在独立的 fork 上下文中执行源码扫描和模块划分。Plan 在自己的上下文窗口中运行，不占用 init 的上下文。
+通过 Skill tool 调用 `sw:init-act-plan`，在独立的 fork 上下文中执行源码扫描和模块划分。Plan 在自己的上下文窗口中运行，不占用 init 的上下文。
 
 ### 编排流程
 
-1. **调用 plan**：使用 Skill tool 调用 `sw:plan`，参数为源码路径
+1. **调用 plan**：使用 Skill tool 调用 `sw:init-act-plan`，参数为源码路径
 2. **确认完成**：读取 `docs/wiki/wiki.json`，确认 `process.phase` 已设为 `"planned"`
 3. **进入检查点**
 
@@ -71,16 +70,19 @@ ${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md
 
 ## Fill 阶段 — 逐模块委派
 
-通过 Skill tool 逐模块调用 `sw:fill`，每个模块在独立的 subagent 上下文中执行。
+通过 Skill tool 逐模块调用 `sw:init-act-fill`，每个模块在独立的 subagent 上下文中执行。
 
 ### 编排流程
 
-读取 `wiki.json` 获取 `process.pendingModules`，按 `process.processingOrder` 顺序逐个处理：
+**Loop 开始时**读取 `wiki.json` 一次，获取 `process.pendingModules` 和 `process.processingOrder`。后续循环中不再重读完整 wiki.json。
 
-1. **调用 fill**：使用 Skill tool 调用 `sw:fill`，参数为目标模块名
-2. **确认完成**：读取 `wiki.json`，确认该模块已从 `process.pendingModules` 移入 `process.completedModules`（fill skill 自行更新 wiki.json）
+按 `process.processingOrder` 顺序逐个处理 `process.pendingModules` 中的模块：
+
+1. **调用 fill**：使用 Skill tool 调用 `sw:init-act-fill`，参数为目标模块名
+2. **轻量确认**：使用 `Grep` 在 wiki.json 中搜索该模块名是否已出现在 `completedModules` 中（而非 `Read` 全文件）
 3. **进度输出**：每完成 2-3 个模块输出简要进度（不暂停等待回复）
-4. **继续下一个**：重复直到 `process.pendingModules` 为空
+4. **继续下一个**：按初始读取的 pendingModules 列表继续下一个模块
+5. **异常处理**：只有当 act 返回异常（失败、部分完成、turn 不够）时，才重新 `Read` wiki.json 评估后续状态
 
 ### 容量检查
 
@@ -94,7 +96,7 @@ ${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md
 
 ## Refine 阶段 — 跨模块一致性
 
-通过 Skill tool 调用 `sw:refine`，在独立的 subagent 上下文中执行。
+通过 Skill tool 调用 `sw:init-act-refine`，在独立的 subagent 上下文中执行。
 
 调用完成后，读取 `wiki.json` 确认 `process.phase` 已更新为 `"completed"`。
 

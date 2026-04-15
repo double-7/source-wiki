@@ -6,6 +6,7 @@ updated: 2026-04-11
 source: "项目配置文件、lint 规则、代码风格定义"
 tags: [conventions]
 related: []
+guidelines: []
 ---
 
 # 开发规范

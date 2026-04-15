@@ -4,70 +4,82 @@ description: 基于 wiki 知识库回答关于代码库的问题
 argument-hint: "[question]"
 user-invocable: true
 disable-model-invocation: true
-context: fork
-agent: wiki-maintainer
 ---
 
-执行 query 操作。
+查询 wiki 知识库并回答问题。
 
 问题: $ARGUMENTS
+
+## ★ 前置步骤 — 加载规则
+
+```
+${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md
+```
 
 ## 查询流程
 
 当用户提出关于代码库的问题时：
 
-1. **搜索 wiki**：先阅读 `docs/wiki/index.md`，定位相关页面
-2. **深入阅读**：阅读相关页面的完整内容
-3. **必要时回源**：如果 wiki 中的信息不足以回答问题，去读取实际源码
+1. **结构化定位**：阅读 `docs/wiki/wiki.json`，利用 `modules`/`features`/`flows` 的结构化索引精确定位相关知识区域。关系类查询（依赖、引用）可直接从 wiki.json 回答，无需读页面
+2. **知识检索**：读定位到的 wiki 页面完整内容
+3. **回源精确定位**：如果 wiki 信息不足，利用 `features[X].source` 精确跳转到源码文件
 4. **综合回答**：基于 wiki 知识（和源码补充）给出结构化回答
+5. **矛盾检测**：如果回源时发现 wiki 描述与源码不一致，在回答末尾附加建议
+
+### 矛盾处理
+
+当发现 wiki 内容与源码不一致时，在回答末尾附加：
+
+```markdown
+⚠️ 发现 wiki 描述与源码不一致：
+- wiki 说"认证使用 JWT"，源码实际使用 OAuth2 + session
+
+建议：运行 `/sw:lint` 检查并修复，或在 [[user-login]] 页面添加 guideline "认证使用 OAuth2 + session"
+```
+
+建议优先级：
+1. 运行 `/sw:lint` 检查并自动修复（推荐）
+2. 在相关页面添加 guideline（如果这是有意的设计决策）
 
 ## 沉淀控制
 
-沉淀（创建新 wiki 页面）**必须由用户明确触发**。agent 不自主沉淀。
-
-### 用户明确要求沉淀时
-
-当用户的问题中包含"保存"、"沉淀"、"记录"等明确意图时，执行沉淀：
-1. 在 `docs/wiki/queries/` 下创建新页面（含完整 frontmatter）
-2. 更新 `docs/wiki/index.md` 的查询沉淀部分
-3. 更新 `wiki.json`：`revision` +1；如沉淀为新的 feature，同时写入 `features` 中对应条目（module、source、imports、page）
-4. 追加 `log.md`
+沉淀（创建或更新 wiki 页面）**必须由用户明确触发**。agent 不自主沉淀。
 
 ### Agent 认为值得沉淀时
 
-当回答满足以下条件之一时，agent 应在回答末尾输出沉淀建议（但**不执行**沉淀）：
+当回答满足以下条件之一时，agent 应在回答末尾使用 AskUserQuestion 询问用户是否沉淀：
 
 - 综合了多个 wiki 页面的分析
 - 涉及跨模块的对比或关系
 - 包含流程梳理或设计洞察
+- 补充或修正了已有 wiki 页面中的信息
 
-输出格式：
+询问时展示拟沉淀的完整内容（新增页面的全文，或更新页面的 diff），让用户看到具体会改什么。选项包含"确认沉淀"、"仅作参考"和"通过 lint 沉淀到更合适的层级"。
 
-```markdown
----
+### 沉淀路径选择
 
-💡 **建议沉淀** — [一句话说明原因]
+根据洞察的性质推荐沉淀目标：
 
-<details>
-<summary>建议页面内容（展开后由主会话创建文件）</summary>
+| 洞察类型 | 推荐路径 | 说明 |
+|---------|---------|------|
+| 跨模块分析 | 建议触发 `/sw:lint` | lint 可将洞察沉淀为 flow 页面 |
+| 对比分析 | 建议触发 `/sw:lint` | lint 可更新相关页面的 consistency |
+| 隐式约定发现 | 建议补充 guideline | 在 module/feature 页面添加 guideline |
+| 一次性查询答案 | `queries/` 目录 | 当前默认路径 |
 
----
-type: query
-title: "页面标题"
-source: []
-created: YYYY-MM-DD
-tags: [标签]
-related: ["[[关联页面]]"]
----
+### 用户确认沉淀时
 
-[完整的 wiki 页面内容]
+根据分析内容与已有 wiki 的关系执行：
 
-</details>
-```
+**新增页面**——在 `docs/wiki/queries/` 下创建新页面（含完整 frontmatter，type: query），更新 `docs/wiki/index.md`。
 
-主会话用户看到建议后自行决定是否沉淀。
+**更新已有页面**——将展示给用户确认的内容写入目标页面（可以是追加段落、修正内容或整体覆盖），更新页面的 `updated` 日期。
+
+然后：
+- 更新 `wiki.json`：`revision` +1；如沉淀为新的 feature，同时写入 `features` 中对应条目
+- 追加 `log.md`
 
 ### 不建议沉淀的情况
 
 - 一次性简单事实查询（如"某个函数在哪个文件"）
-- 答案可以直接从单个 wiki 页面获取
+- 答案可以直接从单个 wiki 页面获取且无需修正

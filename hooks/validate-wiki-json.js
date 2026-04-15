@@ -21,7 +21,9 @@ const REQUIRED_FIELDS = [
   'features'
 ];
 
-const VALID_PHASES = ['planned', 'filling', 'filled', 'refining', 'completed'];
+const VALID_PHASES = ['planned', 'filling', 'filled', 'refining', 'ingesting', 'linting', 'completed'];
+
+const INIT_PHASES = ['planned', 'filling', 'filled', 'refining'];
 
 const MODULE_REQUIRED_FIELDS = ['source', 'features', 'dependencies', 'page'];
 const FEATURE_REQUIRED_FIELDS = ['module', 'source', 'page'];
@@ -54,13 +56,76 @@ function validateWikiJson(json) {
       errors.push(`process.phase "${json.process.phase}" 不在允许范围内 [${VALID_PHASES.join(', ')}]`);
     }
 
-    // 非 completed 状态时检查 pipeline 字段
+    // 非 completed 状态时按操作类型检查 pipeline 字段
     if (json.process.phase !== 'completed') {
-      if ('pendingModules' in json.process && !Array.isArray(json.process.pendingModules)) {
-        errors.push('process.pendingModules 必须是数组');
+      // init 阶段的 pipeline 字段
+      if (INIT_PHASES.includes(json.process.phase)) {
+        if ('pendingModules' in json.process && !Array.isArray(json.process.pendingModules)) {
+          errors.push('process.pendingModules 必须是数组');
+        }
+        if ('completedModules' in json.process && !Array.isArray(json.process.completedModules)) {
+          errors.push('process.completedModules 必须是数组');
+        }
       }
-      if ('completedModules' in json.process && !Array.isArray(json.process.completedModules)) {
-        errors.push('process.completedModules 必须是数组');
+
+      // ingest 子结构验证
+      if (json.process.phase === 'ingesting' && 'ingest' in json.process) {
+        const ingest = json.process.ingest;
+        if (typeof ingest !== 'object' || Array.isArray(ingest)) {
+          errors.push('process.ingest 必须是对象');
+        } else {
+          if (!('anchor' in ingest)) {
+            errors.push('process.ingest 缺少必需字段 "anchor"');
+          } else if (typeof ingest.anchor !== 'string') {
+            errors.push('process.ingest.anchor 必须是字符串');
+          }
+          if (!('targets' in ingest)) {
+            errors.push('process.ingest 缺少必需字段 "targets"');
+          } else if (!Array.isArray(ingest.targets)) {
+            errors.push('process.ingest.targets 必须是数组');
+          } else {
+            const VALID_TARGET_TYPES = ['rename', 'direct', 'correlated', 'flow', 'convention'];
+            const VALID_TARGET_STATUSES = ['pending', 'completed'];
+            for (let i = 0; i < ingest.targets.length; i++) {
+              const t = ingest.targets[i];
+              if (typeof t !== 'object' || Array.isArray(t)) {
+                errors.push(`process.ingest.targets[${i}] 必须是对象`);
+                continue;
+              }
+              if (!('id' in t)) errors.push(`process.ingest.targets[${i}] 缺少 "id"`);
+              if (!('type' in t) || !VALID_TARGET_TYPES.includes(t.type)) {
+                errors.push(`process.ingest.targets[${i}].type 必须是 [${VALID_TARGET_TYPES.join(', ')}]`);
+              }
+              if (!('status' in t) || !VALID_TARGET_STATUSES.includes(t.status)) {
+                errors.push(`process.ingest.targets[${i}].status 必须是 [${VALID_TARGET_STATUSES.join(', ')}]`);
+              }
+            }
+          }
+        }
+      }
+
+      // lint 子结构验证
+      if (json.process.phase === 'linting' && 'lint' in json.process) {
+        const lint = json.process.lint;
+        if (typeof lint !== 'object' || Array.isArray(lint)) {
+          errors.push('process.lint 必须是对象');
+        } else {
+          if ('dimensions' in lint) {
+            if (typeof lint.dimensions !== 'object' || Array.isArray(lint.dimensions)) {
+              errors.push('process.lint.dimensions 必须是对象');
+            } else {
+              const VALID_DIM_STATUSES = ['pending', 'in_progress', 'completed'];
+              for (const [dim, status] of Object.entries(lint.dimensions)) {
+                if (!VALID_DIM_STATUSES.includes(status)) {
+                  errors.push(`process.lint.dimensions["${dim}"] 必须是 [${VALID_DIM_STATUSES.join(', ')}]`);
+                }
+              }
+            }
+          }
+          if ('findings' in lint && !Array.isArray(lint.findings)) {
+            errors.push('process.lint.findings 必须是数组');
+          }
+        }
       }
     }
   } else if ('process' in json) {
