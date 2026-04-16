@@ -17,6 +17,7 @@ agent: wiki-maintainer
 1. 读取 `docs/wiki/wiki.json`
 2. 获取 `process.lint.dimensions` 中所有 `status == "pending"` 的维度
 3. 如果无 pending 维度 → 报告"无待处理维度"并退出
+4. 如果 `process.lint.scope` 非空，确定扫描范围为指定模块的页面；否则扫描范围是全量页面
 
 ### 2. 维度执行顺序
 
@@ -33,7 +34,21 @@ agent: wiki-maintainer
 
 跳过列表中非 pending 的维度。
 
-### 3. 逐维度执行
+### 3. issues 消费（维度检查前执行）
+
+扫描范围内每个 wiki 页面，检查 frontmatter `issues`：
+
+1. 读取页面 issues 列表
+2. 对每个 issue：独立验证问题是否仍存在（读源码/读关联页面）
+3. 问题仍存在且可修 → 修复 + 从 issues 移除
+4. 问题已不存在 → 直接从 issues 移除（已被其他操作修复或源码已变）
+5. 问题存在但属于 content 级别 → 记入 findings，Report 阶段由用户确认后处理
+
+已修复的 issue 不追加到 findings（已在步骤 3 中直接处理）。仅步骤 5 的 content 级别 issue 记入 findings。
+
+issues 处理完成后保存 wiki.json，再继续维度检查。
+
+### 4. 逐维度执行
 
 按上述顺序处理每个 pending 维度。每个维度完成后执行 **保存步骤**（见第 4 步），再继续下一个。
 
@@ -63,6 +78,13 @@ agent: wiki-maintainer
 - 检查 features 是否都有对应的 feature 页面
 - 检查 modules 中 dependencies 提到的依赖是否有对应模块
 - 检查是否缺少明显的跨模块 flow 页面
+- **源码覆盖检测**：
+  1. 收集 wiki.json 的 `modules[X].source` → 已映射的源码目录集合
+  2. 收集 `features[X].source` → 已映射的源码文件集合
+  3. Glob 扫描项目源码目录（排除 node_modules/vendor/.git/build/dist 等生成目录）
+  4. 对比：发现未映射的目录或文件
+  5. 未映射的新目录 → finding: "建议创建新模块页面 + feature 页面"
+  6. 未映射的新文件 → finding: "建议创建新 feature 页面或归入最近模块"
 
 #### staleInfo — 过时信息
 
@@ -88,7 +110,7 @@ agent: wiki-maintainer
 - 检查 module 页面是否只描述领域划分（不应详细描述单个 feature 的实现）
 - 检查 feature 页面是否足够具体（不应泛泛描述整个模块）
 
-### 4. 保存步骤（每个维度完成后执行）
+### 5. 保存步骤（每个维度完成后执行）
 
 1. 将 `process.lint.dimensions` 中对应维度标记为 `"completed"`
 2. 将检查发现追加到 `process.lint.findings` 数组，每条 finding 格式：
@@ -123,6 +145,6 @@ agent: wiki-maintainer
    - 不足以处理下一个维度 → 返回摘要退出
    - 充足 → 继续下一个 pending 维度
 
-### 5. 返回摘要
+### 6. 返回摘要
 
 返回处理的维度清单、各维度问题数量、安全修复数量。编排器从 wiki.json 的 findings 重建完整报告。

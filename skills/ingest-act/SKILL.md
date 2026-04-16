@@ -15,7 +15,7 @@ Target ID: $ARGUMENTS
 1. 读取 `docs/wiki/wiki.json`
 2. 从 `process.ingest.targets` 中找到 `id == $ARGUMENTS` 的 target
 3. 获取 target 的 `type`、`status`（必须为 pending）、`reason`（如有）
-4. 读取目标页面的 frontmatter `guidelines`（如果页面存在）
+4. 读取目标页面的 frontmatter `guidelines` 和 `issues`（如果页面存在）
 
 如果 target 不存在或已 completed → 报错退出。
 
@@ -46,29 +46,29 @@ rename 类型不需要重读源码，只做路径替换。
 
 ### type == "correlated"（上游模块变更的关联影响）
 
-1. **读取目标 feature 的 wiki 页面**：获取当前描述和 frontmatter `guidelines`
-2. **读取变更符号的新签名**（Tier 1）：获取上游变更符号的当前导出签名
-3. **定位页面中引用该符号的段落**，按以下处理：
-   - **有 guideline** → 按 guideline 更新描述
-   - **无 guideline** → 基于新签名更新；信息不足以判断影响时追加审查标注：
+correlated 类型始终写入页面 frontmatter issues，不做 inline 修改。即使变更看起来简单（符号重命名），ingest-act 在 fork 模式下只有局部上下文，无法可靠判断完整影响范围。这些 issues 由 lint 定向或全量扫描时统一消费。
 
-```markdown
-> **⚠️ 审查建议**：上游 {reason} 已变更，请核实本页面中引用的相关描述是否仍准确。
-> — *ingest {日期}*
+1. **读取目标 feature 的 wiki 页面**：获取当前描述和 frontmatter `guidelines` 和 `issues`
+2. **读取变更符号的新签名**（Tier 1）：获取上游变更符号的当前导出签名
+3. **在页面 frontmatter issues 中追加条目**：
+
+```yaml
+issues:
+  - "上游 {符号名} 已变更（{reason}），引用描述可能过时 — ingest {ISO 日期}"
 ```
 
 4. 更新页面的 `updated` 日期
 
 ### type == "flow"（涉及的跨模块流程）
 
-1. **读取 flow 页面**：获取当前描述和 frontmatter `guidelines`
-2. **定位涉及变更模块的步骤**，按以下处理：
-   - **有 guideline** → 按 guideline 更新步骤描述
-   - **无 guideline** → 基于变更模块最新状态更新；信息不足以判断影响时追加审查标注：
+flow 类型始终写入页面 frontmatter issues，不做 inline 修改。跨模块流程同理需要全局视角判断影响范围。
 
-```markdown
-> **⚠️ 审查建议**：本流程涉及的模块已变更（{reason}），请核实步骤描述是否仍准确。
-> — *ingest {日期}*
+1. **读取 flow 页面**：获取当前描述和 frontmatter `guidelines` 和 `issues`
+2. **在页面 frontmatter issues 中追加条目**：
+
+```yaml
+issues:
+  - "本流程涉及的模块已变更（{reason}），步骤描述可能过时 — ingest {ISO 日期}"
 ```
 
 3. 更新页面的 `updated` 日期

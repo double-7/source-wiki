@@ -4,6 +4,7 @@ type: index
 created: 2026-04-10
 updated: 2026-04-10
 guidelines: []
+issues: []
 ---
 
 # 知识库索引

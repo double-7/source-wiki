@@ -28,18 +28,24 @@ ${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md
 
 ### 矛盾处理
 
-当发现 wiki 内容与源码不一致时，在回答末尾附加：
+当发现 wiki 内容与源码不一致时，按以下逻辑处理：
 
-```markdown
-⚠️ 发现 wiki 描述与源码不一致：
-- wiki 说"认证使用 JWT"，源码实际使用 OAuth2 + session
+**简单事实矛盾**（单页面、源码可验证、影响明确）：
 
-建议：运行 `/sw:lint` 检查并修复，或在 [[user-login]] 页面添加 guideline "认证使用 OAuth2 + session"
-```
+1. 在回答中说明发现的矛盾
+2. 使用 AskUserQuestion 展示详情：
+   ```
+   wiki 说"认证使用 JWT"，源码实际使用 OAuth2 + session。
+   是否修正 [[user-login]] 页面？
+   ```
+3. 用户确认 → 执行 inline fix（修改页面内容 + 更新 wiki.json revision + 追加 log.md）
+4. 用户拒绝 → 写 issues 到页面 frontmatter，告知用户"已记录此问题。运行 /sw:lint 将统一处理。"
 
-建议优先级：
-1. 运行 `/sw:lint` 检查并自动修复（推荐）
-2. 在相关页面添加 guideline（如果这是有意的设计决策）
+**复杂不一致**（跨页面、需要全局判断、影响不明确）：
+
+1. 在回答中说明发现的不一致
+2. 写 issues 到当前正在阅读的相关页面 frontmatter
+3. 告知用户："已记录此问题。运行 `/sw:lint` 将统一处理。"
 
 ## 沉淀控制
 
@@ -62,8 +68,7 @@ ${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md
 
 | 洞察类型 | 推荐路径 | 说明 |
 |---------|---------|------|
-| 跨模块分析 | 建议触发 `/sw:lint` | lint 可将洞察沉淀为 flow 页面 |
-| 对比分析 | 建议触发 `/sw:lint` | lint 可更新相关页面的 consistency |
+| 跨模块分析 | `queries/` 或写 issues | 复杂跨模块分析沉淀为 query 页面；跨页面一致性问题写 issues 交给 lint |
 | 隐式约定发现 | 建议补充 guideline | 在 module/feature 页面添加 guideline |
 | 一次性查询答案 | `queries/` 目录 | 当前默认路径 |
 
