@@ -138,27 +138,9 @@ issues: []                 # 待处理的已知问题，由 lint 统一消费和
 
 模板提供了推荐的 frontmatter 字段和页面结构，但可以根据实际情况灵活调整。
 
-## 操作流程
+## 操作约定
 
-各操作的具体流程由对应的 skill 定义，不在本文档中重复。接到操作指令后，按 skill 中定义的流程和步骤执行。各操作的 wiki.json 字段写入时机见"状态文件 → 生命周期"。所有操作共用的日志格式见「日志格式」。
-
-**REACT 操作**（编排器 + act 循环，在用户会话中运行）：
-
-- **初始化（init）**：编排器。Plan → Fill → Refine 三阶段通过 fork agent 委派执行。自动检测 wiki.json 状态从断点继续。
-- **增量摄取（ingest）**：编排器。Detect → Loop(ingest-act) → Summary。检测源码变更，构建影响图（重命名/直接/关联/流程/约定五级），循环调用 `sw:ingest-act` 逐 target 处理。中断后从断点恢复。
-- **健康检查（lint）**：编排器。Detect → Loop(lint-act) → Report。规划检查维度，循环调用 `sw:lint-act` 逐维度检查。中断后从断点恢复。
-
-**REACT act**（在 fork 模式下自主运行，由编排器通过 Skill tool 委派）：
-
-- **init-act-plan**：由 init 委派，扫描源码元数据、制定模块划分方案、生成 wiki 骨架。
-- **init-act-fill**：由 init 逐模块委派，自包含执行（读 wiki.json → 分析源码 → 创建页面 → 更新 wiki.json）。
-- **init-act-refine**：由 init 委派，自包含执行跨模块一致性检查、flow 页面创建、overview 完善。
-- **ingest-act**：由 ingest 委派，处理单个 target（rename/direct/correlated/flow/convention 五种类型），自包含执行（读 wiki.json → 处理 → 写回 wiki.json）。
-- **lint-act**：由 lint 委派，执行单维度检查，自包含执行（读 wiki.json → 检查 → 写回 wiki.json）。
-
-**独立操作**（在用户会话中运行，无需编排器）：
-
-- **查询（query）**：基于 wiki.json 结构化元数据 + wiki 页面回答问题。优先消费 wiki.json 的 exports/imports/dependencies/features/modules 精确导航知识网络，而非仅靠 index.md 文本搜索。关系查询（依赖、引用）直接从 wiki.json 回答，无需读页面文本；必要时阅读 overview.md 理解全局上下文。回源时利用 `features[X].source` 精确跳转。典型负载 5-10 turns。当分析结果值得沉淀时，使用 AskUserQuestion 询问用户是否创建 wiki 页面，用户确认后立即执行。
+各操作的具体流程由对应的 skill 定义，不在本文档中重复。接到操作指令后，按 skill 中定义的流程和步骤执行。
 
 ### 阅读策略
 
@@ -251,8 +233,10 @@ issues: []                 # 待处理的已知问题，由 lint 统一消费和
 - 源码文件到 wiki 页面的精确映射（features[X].source）
 - 增量模式的模式判断（检查 process.phase 是否为 completed）
 
-**互斥规则**：同一时间只有一个 REACT 操作活跃。`process.phase` 标识当前操作类型。
-**更新规则**：任何修改了 wiki 内容的操作完成后，都必须更新 `wiki.json`——至少 bump `revision`。如果页面被创建或删除，还须同步更新对应的 `features`/`modules`/`flows` 条目。这确保增量 ingest 的 git anchor 和 features.source 映射始终与实际 wiki 状态一致。
+### 共享约束
+
+- **互斥**：同一时间只有一个 REACT 操作活跃。`process.phase` 标识当前操作类型。如果用户在某个操作进行中启动了另一个操作，编排器应提示当前状态并询问如何处理
+- **更新**：任何修改了 wiki 内容的操作完成后，都必须更新 `wiki.json`——至少 bump `revision`。如果页面被创建或删除，还须同步更新对应的 `features`/`modules`/`flows` 条目。这确保增量 ingest 的 git anchor 和 features.source 映射始终与实际 wiki 状态一致
 
 ### 格式
 
@@ -380,53 +364,3 @@ issues: []                 # 待处理的已知问题，由 lint 统一消费和
 | `flows` | object | flow 名 → flow 信息。每个 flow 含 modules、page（Refine 阶段创建） |
 | `flows[X].modules` | string[] | 流程涉及的模块名列表 |
 | `flows[X].page` | string | flow 的 wiki 页面路径 |
-
-### 生命周期
-
-**init 操作：**
-
-- **Plan 完成**：创建 wiki.json，`revision` 设为 `1`，`process.phase` 设为 `planned`，填入 `process`（pendingModules、processingOrder、estimatedFlows）、`architectures.techStack`、`modules`（骨架：source、features、dependencies、page），空 `features` 和 `flows`
-- **每模块 Fill 完成**：更新 `process.completedModules`/`pendingModules`，写入 `modules[当前].exports`/`conventions`，创建 `features` 中各 feature 条目（module、source、imports、page），`revision` +1，更新 `lastUpdated`
-- **所有模块 Fill 完成**：`process.phase` 设为 `filled`，`revision` +1
-- **Refine 完成**：创建 `flows` 条目，完善 `architectures.pages`，`process` 最小化为 `{phase: "completed"}`，`revision` +1，更新 `lastUpdated`
-
-**ingest 操作：**
-
-- **Detect 完成**：`process.phase` 设为 `ingesting`，写入 `process.ingest`（anchor + 完整 targets 清单）
-- **每个 ingest-act 完成**：对应 target 标记为 `completed`，`revision` +1，更新 `lastUpdated`
-- **所有 targets 完成（Summary）**：`process` 最小化为 `{phase: "completed"}`，追加 log.md
-
-**lint 操作：**
-
-- **Detect 完成**：`process.phase` 设为 `linting`，写入 `process.lint`（dimensions + 空 findings + scope）
-- **每个 lint-act 完成**：对应维度标记为 `completed`，findings 追加发现
-- **所有维度完成（Report）**：`process` 最小化为 `{phase: "completed"}`，输出报告，追加 log.md
-
-**其他操作：**
-
-- **query 产生沉淀**：`revision` +1（仅当用户明确要求沉淀时），新 feature 沉淀时同时写入 `features` 条目
-
-### 中断恢复
-
-所有 REACT 操作共享同一中断恢复模式——编排器启动时读取 `wiki.json` 的 `process.phase`：
-
-**init 操作：**
-
-- **不存在** → 全新开始，执行 Plan 阶段
-- **`process.phase == "completed"`** → 询问用户是否重新全量分析
-- **`process.phase == "planned"`** → 展示已有 modules 和 processingOrder，请用户确认后开始 Fill
-- **`process.phase == "filling"`** → 跳过已完成的模块，从 `process.pendingModules` 的第一个继续 Fill
-- **`process.phase == "filled"`** → 直接进入 Refine 阶段
-- **`process.phase == "refining"`** → 直接进入 Refine 阶段（重新执行）
-
-**ingest 操作：**
-
-- **`process.phase == "completed"`** → 新 ingest，执行 Detect
-- **`process.phase == "ingesting"`** → 中断恢复，读取 `process.ingest.targets`，跳过已完成的 targets，从第一个 `pending` 的 target 继续 Loop
-
-**lint 操作：**
-
-- **`process.phase == "completed"`** → 新 lint，执行 Detect
-- **`process.phase == "linting"`** → 中断恢复，读取 `process.lint.dimensions`，跳过已完成的维度，从第一个 `pending` 的维度继续 Loop
-
-**互斥保护**：如果用户在某个操作进行中启动了另一个操作（如 ingest 进行中启动 init），编排器应提示用户当前状态并询问如何处理。

@@ -20,13 +20,6 @@ ${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md
 
 此文件定义了 wiki 的层级体系、目录结构、页面格式约定、Feature 粒度规则、wiki.json 格式等所有规则。后续所有阶段的操作必须严格遵循这些规则。
 
-**特别注意以下规则（常见遗漏点）：**
-- 页面必须按目录分类存放：`modules/`、`features/`、`flows/`、`architectures/`、`queries/`
-- 每个 wiki 页面必须包含完整的 YAML frontmatter（title、type、created、updated、source、tags、related、module）
-- Feature 页面的 frontmatter 必须包含 `module` 字段指向所属模块
-- 使用 Obsidian 双链语法 `[[页面名]]` 进行交叉引用
-- 模板文件位于 `${CLAUDE_PLUGIN_ROOT}/templates/`，创建页面时按需读取对应模板
-
 ## 阶段状态机
 
 读取 `docs/wiki/wiki.json` 判断当前状态，决定执行哪个阶段：
