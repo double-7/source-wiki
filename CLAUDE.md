@@ -21,13 +21,26 @@ LLM 生成的 wiki 天然存在准确率上限（隐式约定、复杂控制流�
 
 ## 架构
 
-- `agents/wiki-maintainer.md` — 知识库规则定义（知识模型、页面格式、修改协议、修复边界、wiki.json 数据模式）
-- `skills/` — 四条命令的实现：init（全量）、ingest（增量）、lint（检查）、query（查询）
-- `skills/init-act-plan/fill/refine`、`skills/ingest-act`、`skills/lint-act` — REACT act，在 fork 上下文中自主执行
-- `templates/` — 页面模板，agent 创建 wiki 页面时按需读取
-- `.claude-plugin/plugin.json` — 插件清单
+三个层面：
 
-规则只在 `agents/wiki-maintainer.md` 中定义，命令实现只在各 `SKILL.md` 中定义。
+- **产品层**：init/ingest/lint/query 四维度定义 wiki 生命周期
+- **架构层**：wiki.json（状态中心）+ REACT 编排（长操作拆分为编排器+act）
+- **实现层**：agent 定义 WHAT（规则、模型、约束），skills 定义 HOW（执行流程）
+
+### 文件结构
+
+- `agents/wiki-maintainer.md` — 纯 WHAT：知识模型、页面格式、共享不变量、wiki.json 知识索引 schema
+- `skills/` — 纯 HOW：7 个 SKILL.md（4 编排器 + 3 act）
+  - `init/SKILL.md` — 编排器：扫描规划 → 逐模块委派 → 收尾
+  - `init-act/SKILL.md` — act：分析单个模块源码，创建 wiki 页面
+  - `ingest/SKILL.md` — 编排器：变更检测 → 影响分析 → 逐 target 委派
+  - `ingest-act/SKILL.md` — act：处理单个变更目标
+  - `lint/SKILL.md` — 编排器：规划维度 → 委派检查 → 汇总报告
+  - `lint-act/SKILL.md` — act：执行维度检查（freshness/coverage/consistency/integrity）
+  - `query/SKILL.md` — 直接执行，无 REACT
+- `templates/` — 5 个页面模板（index、overview、module、feature、flow）
+- `hooks/validate-wiki-json.js` — wiki.json 写入校验（仅校验知识索引，不校验操作特异 process 子字段）
+- `.claude-plugin/plugin.json` — 插件清单
 
 ### REACT 编排模式
 
@@ -53,10 +66,10 @@ query 不使用此模式，直接在用户会话中执行。
 - `docs:` 文档变更
 - `chore:` 杂项
 
-
 ## 注意事项
 
 - 修改 wiki-maintainer.md 时只添加规则/格式/约束（WHAT），执行流程/状态转换（HOW）放对应 SKILL.md
+- wiki.json 的 process 子字段（init 的 queue/completed、ingest 的 anchor/targets、lint 的 dimensions/findings）由各 SKILL.md 自行定义，不在 agent 中定义
 - 多个 SKILL.md 间的小量重复（~5 句）可接受，不抽取为共享 scheme
 - 模板中引用路径用 `${CLAUDE_PLUGIN_ROOT}/templates/`（运行时变量）
 - Wiki 输出路径固定为 `docs/wiki/`（相对于被分析的目标项目）

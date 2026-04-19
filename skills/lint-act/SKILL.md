@@ -1,6 +1,6 @@
 ---
 name: sw:lint-act
-description: "流式执行所有 pending lint 维度检查，到容量上限自动保存退出"
+description: "执行 lint 维度检查，处理 issues，到容量上限自动保存退出"
 user-invocable: false
 context: fork
 agent: wiki-maintainer
@@ -8,143 +8,88 @@ agent: wiki-maintainer
 
 执行所有 pending 维度的 lint 检查。由 `sw:lint` 编排器通过 Skill tool 调用。
 
-每完成一个维度立即保存 wiki.json，确保中断不丢失进度。容量不足时保存退出，编排器会再次调用处理剩余维度。
-
 ## 执行流程
 
 ### 1. 读取上下文
 
-1. 读取 `docs/wiki/wiki.json`
-2. 获取 `process.lint.dimensions` 中所有 `status == "pending"` 的维度
-3. 如果无 pending 维度 → 报告"无待处理维度"并退出
-4. 如果 `process.lint.scope` 非空，确定扫描范围为指定模块的页面；否则扫描范围是全量页面
+读取 wiki.json：
+- 获取 pending 维度列表
+- 获取 scope（非空则定向扫描）
 
-### 2. 维度执行顺序
+### 2. issues 消费（维度检查前执行）
 
-按成本从低到高处理，共享页面读取结果：
+扫描范围内每个页面的 frontmatter `issues`，逐个验证：
 
-1. **staleInfo** — Glob 验证 source 路径，不读页面内容
-2. **orphanPages** — 扫描文件列表，检查入站链接
-3. **missingPages** — 扫描双链，检查文件存在
-4. **crossReferences** — 基于 frontmatter 和 wiki.json 字段检查
-5. **moduleAttribution** — 基于 frontmatter 和 wiki.json 字段检查
-6. **consistency** — 对比多页面描述，需读正文
-7. **hierarchyCorrectness** — 检查内容是否匹配层级，需读正文
-8. **dataGaps** — 检查内容充实度，需读正文
+- **源码可验证** → 修复并清除 issue
+- **需要用户判断** → 升级为 finding（fixType: content）
+- **问题已不存在** → 直接清除 issue
 
-跳过列表中非 pending 的维度。
+修复时遵循修改协议：读 guidelines → 修复 → 更新 updated → revision +1。
 
-### 3. issues 消费（维度检查前执行）
+### 3. 维度执行
 
-扫描范围内每个 wiki 页面，检查 frontmatter `issues`：
+按以下顺序执行（从低成本到高成本）：
 
-1. 读取页面 issues 列表
-2. 对每个 issue：独立验证问题是否仍存在（读源码/读关联页面）
-3. 问题仍存在且可修 → 修复 + 从 issues 移除
-4. 问题已不存在 → 直接从 issues 移除（已被其他操作修复或源码已变）
-5. 问题存在但属于 content 级别 → 记入 findings，Report 阶段由用户确认后处理
+#### freshness（源码路径有效性）
 
-已修复的 issue 不追加到 findings（已在步骤 3 中直接处理）。仅步骤 5 的 content 级别 issue 记入 findings。
+- Glob 验证 wiki.json 中所有 modules[X].source 是否指向存在的目录
+- Glob 验证所有 features[X].source 中的路径是否存在
+- 不存在的标记为 finding：severity: high, fixType: none, description: 说明哪个路径无效
 
-issues 处理完成后保存 wiki.json，再继续维度检查。
+#### coverage（覆盖完整性）
 
-### 4. 逐维度执行
+- 扫描所有 wiki 页面文件列表
+- 检查：modules 中注册的都有页面文件
+- 检查：无孤立页面（每个页面至少被一个其他页面或 index.md 引用）
+- 检查：正文中 `[[双链]]` 都有对应的实际文件
+- 缺失的标记为 finding
 
-按上述顺序处理每个 pending 维度。每个维度完成后执行 **保存步骤**（见第 4 步），再继续下一个。
+#### integrity（数据一致性）
 
-维度检查规则：
+- 对比 wiki.json 与实际文件
+- wiki.json 中注册的页面文件都存在
+- 实际 wiki 文件都在 wiki.json 中有注册（modules/features/flows 中有对应条目）
+- frontmatter 必需字段完整（title、type、created、updated、source）
+- feature 页面的 module 字段指向存在的模块
 
-#### consistency — 一致性
+#### consistency（内容一致性）
 
-- 读取多个相关页面，对比对同一概念的不同描述
-- 重点检查：feature 页面与所属 module 页面的描述是否矛盾
-- 检查 wiki.json 中 features 的 imports 与页面中描述的依赖是否一致
+- 读取多个页面内容进行交叉比对
+- 同一概念在不同页面术语一致
+- 页面内容匹配其 type 层级（如 flow 页面不应描述单 feature 的内部实现）
+- 这个维度成本最高，需要读多个页面完整内容
 
-#### orphanPages — 孤立页面
+### 4. 保存步骤
 
-- 扫描 `docs/wiki/` 下所有 .md 文件（排除 index.md 和 log.md）
-- 检查每个页面是否有入站链接（从 index.md 或其他页面指向它）
-- wiki.json 中的 modules/features/flows 是否都有对应的实际页面文件
+每完成一个维度：
 
-#### missingPages — 缺失页面
+1. 标记维度为 completed
+2. 追加 findings 到 wiki.json process.lint.findings
+3. 每条 finding 包含：
+   - `dimension`: 维度名
+   - `severity`: high / medium / low
+   - `page`: 涉及的页面路径
+   - `description`: 问题描述
+   - `fixType`: safe / content / none
+   - `fixPlan`: 修复方案（如有）
+4. safe 类型直接修复（更新页面内容、frontmatter、wiki.json）
+5. 保存 wiki.json
 
-- 扫描所有 wiki 页面中的 `[[双链]]` 语法
-- 检查每个双链是否有对应的实际 .md 文件
-- 列出所有指向不存在页面的双链
+### 5. 容量检查
 
-#### dataGaps — 数据缺口
-
-- 检查 wiki.json 中 modules 是否都有对应的 module 页面且内容充实
-- 检查 features 是否都有对应的 feature 页面
-- 检查 modules 中 dependencies 提到的依赖是否有对应模块
-- 检查是否缺少明显的跨模块 flow 页面
-- **源码覆盖检测**：
-  1. 收集 wiki.json 的 `modules[X].source` → 已映射的源码目录集合
-  2. 收集 `features[X].source` → 已映射的源码文件集合
-  3. Glob 扫描项目源码目录（排除 node_modules/vendor/.git/build/dist 等生成目录）
-  4. 对比：发现未映射的目录或文件
-  5. 未映射的新目录 → finding: "建议创建新模块页面 + feature 页面"
-  6. 未映射的新文件 → finding: "建议创建新 feature 页面或归入最近模块"
-
-#### staleInfo — 过时信息
-
-- 读取 wiki.json 中 features[X].source 和 modules[X].source 路径
-- 验证这些路径指向的文件/目录是否仍然存在
-- 列出所有指向不存在路径的条目
-
-#### crossReferences — 交叉引用
-
-- 对于 wiki.json 中标记了依赖关系的模块，检查页面之间是否有互相引用
-- 对于 features 中有 imports 的条目，检查页面中是否引用了被 import 模块的 feature 页面
-- 对于 flows 中涉及的模块，检查 flow 页面是否引用了对应的 module 页面
-
-#### moduleAttribution — 归属完整性
-
-- 检查每个 feature 页面的 frontmatter `module` 字段是否指向存在的模块
-- 检查 `features[X].module` 是否在 `modules` 中有对应条目
-- 检查 `modules[X].features` 列表是否与 features 中 `module == X` 的条目一一对应
-
-#### hierarchyCorrectness — 层级正确性
-
-- 检查 flow 页面是否只描述跨模块流程（不应描述单个 feature 的内部实现）
-- 检查 module 页面是否只描述领域划分（不应详细描述单个 feature 的实现）
-- 检查 feature 页面是否足够具体（不应泛泛描述整个模块）
-
-### 5. 保存步骤（每个维度完成后执行）
-
-1. 将 `process.lint.dimensions` 中对应维度标记为 `"completed"`
-2. 将检查发现追加到 `process.lint.findings` 数组，每条 finding 格式：
-
-```json
-{
-  "dimension": "{维度名}",
-  "severity": "error | warning | info",
-  "page": "{受影响页面路径}",
-  "description": "{发现描述}",
-  "fixType": "safe | content | none",
-  "fixPlan": "{修复方案描述，content 类型必填}"
-}
-```
-
-字段说明：
-- `fixType` — 修复类型分类：
-  - `"safe"`：安全修复（缺失双链、错误 module 字段、frontmatter/wiki.json 不同步），**lint-act 直接执行**
-  - `"content"`：内容修复（页面拆分/合并、内容重写、补充空洞页面），**lint-act 只记录方案，由编排器确认后执行**
-  - `"none"`：仅报告，不修复（如架构层面的建议、源码路径已失效需人工确认）
-- `fixPlan` — 修复方案描述。`content` 类型必填，描述具体要做什么。`safe` 类型可选（描述已执行了什么）。`none` 类型不需要
-
-3. **安全修复直接执行**：对于 `fixType: "safe"` 的发现，在检查过程中直接修复：
-   - 补全缺失的双链 → 编辑对应页面，添加 `[[双链]]`
-   - 修正错误的 module 字段 → 编辑 feature 页面 frontmatter 中的 `module` 字段
-   - 同步 wiki.json 与页面 frontmatter 的不一致 → 以 wiki.json 为准更新 frontmatter
-   - 安全修复是幂等的，中断后重跑不会重复修复
-
-4. 写回 wiki.json
-
-5. **容量检查**：评估剩余容量是否足够处理下一个维度
-   - 不足以处理下一个维度 → 返回摘要退出
-   - 充足 → 继续下一个 pending 维度
+每完成一个维度后评估。容量不足 → 保存已完成的维度进度，退出。
 
 ### 6. 返回摘要
 
-返回处理的维度清单、各维度问题数量、安全修复数量。编排器从 wiki.json 的 findings 重建完整报告。
+```
+## Lint 维度检查摘要
+
+### 已完成维度
+- freshness: X finding(s), Y safe 修复
+- coverage: X finding(s)
+
+### issues 处理
+- 已修复：N 个
+- 已清除：N 个
+- 升级为 finding：N 个
+```

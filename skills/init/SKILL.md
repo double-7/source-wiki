@@ -1,51 +1,87 @@
 ---
 name: sw:init
-description: "阶段式全量分析：Plan → Fill → Refine。自动检测状态从断点继续"
+description: "全量分析：扫描源码 → 模块分析 → 收尾。自动检测状态从断点继续"
 argument-hint: "[source-path]"
 user-invocable: true
 disable-model-invocation: true
 ---
 
-阶段式全量初始化——从源码构建完整的 wiki 知识库。
+全量初始化——从源码构建完整的 wiki 知识库。
 
 源码路径: $ARGUMENTS
 
-## ★ 前置步骤 — 加载规则
+## 前置步骤
 
-**在执行任何操作之前，必须先读取以下文件获取所有共享规则：**
+读取 `${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md` 加载共享规则（知识模型、页面格式、修改协议、修复边界）。
 
+## 状态判断
+
+读取 `docs/wiki/wiki.json`：
+
+| 状态 | 动作 |
+|------|------|
+| 不存在 | 执行阶段一（扫描规划） |
+| `process.phase == "init-running"` | 从断点继续（跳到阶段二） |
+| `process.phase == "completed"` | AskUserQuestion：重新全量分析（覆盖）还是用 `/sw:ingest` 增量？ |
+| 其他 phase | 提示"另一个操作进行中（{phase}），请先完成" |
+
+## 阶段一：扫描规划
+
+编排器直接执行轻量扫描，不需要 fork。
+
+### 1. 扫描源码元数据
+
+按以下顺序操作（只读签名和结构，不读实现）：
+
+1. **目录结构**：Glob 源码目录（depth 3），排除 node_modules/、vendor/、dist/、build/、out/、.git/、docs/wiki/
+2. **包管理文件**（选最相关的一个）：Read package.json / pom.xml / go.mod / Cargo.toml / pyproject.toml
+3. **README.md**：Read
+4. **导出签名**：Grep `export` 语句（签名行，不读文件内容）。超过 200 行匹配时按目录分批
+5. **依赖关系**：Grep `import` / `require` 语句（签名行）。只扫入口文件和桶文件（index.ts / mod.ts）
+6. **测试文件名**：Glob `*.test.*` / `*.spec.*` / `*_test.*`
+
+### 2. 综合分析
+
+基于扫描结果：
+- 确定模块边界（依据：目录结构、export 聚合、import 依赖）
+- 为每个模块列出预估的 features、keyFiles
+- 确定处理顺序（按依赖关系从底层到上层）
+- 对模糊区域标注低置信度
+
+### 3. 创建 wiki 骨架
+
+创建以下文件：
+
+1. **wiki.json**：
+```json
+{
+  "revision": 1,
+  "lastUpdated": "<now>",
+  "process": {
+    "phase": "init-running",
+    "queue": ["<所有模块>"],
+    "completed": []
+  },
+  "modules": {
+    "<模块名>": {
+      "source": "<源码路径>",
+      "features": [],
+      "page": "docs/wiki/modules/<模块名>.md"
+    }
+  },
+  "features": {},
+  "flows": {}
+}
 ```
-${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md
-```
 
-此文件定义了 wiki 的层级体系、目录结构、页面格式约定、Feature 粒度规则、wiki.json 格式等所有规则。后续所有阶段的操作必须严格遵循这些规则。
+2. **index.md**：导航骨架（参考 `${CLAUDE_PLUGIN_ROOT}/templates/index.md`）
+3. **overview.md**：骨架版（参考 `${CLAUDE_PLUGIN_ROOT}/templates/overview.md`），填入项目名和技术栈
+4. **各模块 stub 页面**：仅 frontmatter + 一句话概述（参考 `${CLAUDE_PLUGIN_ROOT}/templates/module.md`）
+5. **log.md**：初始条目
 
-## 阶段状态机
+### 4. 检查点 — 用户确认
 
-读取 `docs/wiki/wiki.json` 判断当前状态，决定执行哪个阶段：
-
-| wiki.json 状态 | 动作 |
-|----------------|------|
-| 不存在 | 执行 **Plan 阶段** |
-| `process.phase == "completed"` | 询问用户："wiki 已存在且完整。要重新全量分析（将覆盖现有内容），还是使用 `/sw:ingest` 做增量更新？" |
-| `process.phase == "planned"` | 展示已有 modules 和 processingOrder，请用户确认后执行 **Fill 阶段** |
-| `process.phase == "filling"` | 从 `process.pendingModules` 继续执行 **Fill 阶段** |
-| `process.phase == "filled"` | 执行 **Refine 阶段** |
-| `process.phase == "refining"` | 执行 **Refine 阶段** |
-
-## Plan 阶段 — 委派
-
-通过 Skill tool 调用 `sw:init-act-plan`，在独立的 fork 上下文中执行源码扫描和模块划分。Plan 在自己的上下文窗口中运行，不占用 init 的上下文。
-
-### 编排流程
-
-1. **调用 plan**：使用 Skill tool 调用 `sw:init-act-plan`，参数为源码路径
-2. **确认完成**：读取 `docs/wiki/wiki.json`，确认 `process.phase` 已设为 `"planned"`
-3. **进入检查点**
-
-### ★ 检查点 — 用户确认
-
-读取 `docs/wiki/wiki.json` 中的 `modules` 和 `process.processingOrder`，使用 AskUserQuestion 展示模块划分方案：
+AskUserQuestion 展示模块划分方案：
 
 > **模块划分方案**：
 > - auth (src/auth/, ~12 files) → features: login, register, token-refresh
@@ -53,57 +89,64 @@ ${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md
 >
 > **处理顺序**：auth → order → payment（按依赖关系从底层到上层）
 >
-> **预估跨模块流程**：用户认证流程
->
 > 此划分是否合理？可以调整模块的合并、拆分或重命名。
 
-**必须等待用户确认后才能继续。** 用户确认后：
-- 如用户要求调整，按调整后的方案更新 wiki.json
-- 进入 Fill 阶段
+用户确认后：如需调整则更新 wiki.json，进入阶段二。
 
-## Fill 阶段 — 逐模块委派
-
-通过 Skill tool 逐模块调用 `sw:init-act-fill`，每个模块在独立的 subagent 上下文中执行。
+## 阶段二：逐模块委派
 
 ### 编排流程
 
-**Loop 开始时**读取 `wiki.json` 一次，获取 `process.pendingModules` 和 `process.processingOrder`。后续循环中不再重读完整 wiki.json。
+Loop 开始时读 wiki.json 一次，获取 process.queue 和 process.completed。
 
-按 `process.processingOrder` 顺序逐个处理 `process.pendingModules` 中的模块：
+按 queue 顺序逐个处理：
 
-1. **调用 fill**：使用 Skill tool 调用 `sw:init-act-fill`，参数为目标模块名
-2. **轻量确认**：使用 `Grep` 在 wiki.json 中搜索该模块名是否已出现在 `completedModules` 中（而非 `Read` 全文件）
-3. **进度输出**：每完成 2-3 个模块输出简要进度（不暂停等待回复）
-4. **继续下一个**：按初始读取的 pendingModules 列表继续下一个模块
-5. **异常处理**：只有当 act 返回异常（失败、部分完成、turn 不够）时，才重新 `Read` wiki.json 评估后续状态
-
-### 容量检查
-
-每完成一个模块后评估：
-- 如果已使用超过 120 turns → 保存状态并退出，提示："已完成 X/Y 模块。再次运行 `/sw:init` 继续处理剩余模块。"
-- 否则 → 继续下一个模块
+1. **调用 act**：Skill tool 调用 `sw:init-act`，参数为目标模块名
+2. **轻量确认**：Grep wiki.json 搜索该模块名确认已在 completed 中
+3. **进度输出**：每完成 2-3 个模块输出简要进度（不暂停等待）
+4. **继续下一个**：按初始读取的 queue 列表继续
+5. **异常处理**：只有当 act 返回异常时，才 Read wiki.json 评估状态
 
 ### 全部模块完成
 
-读取 `wiki.json` 确认 `process.phase` 已更新为 `"filled"`。如果 turns 充足（剩余 > 40 turns），自动进入 Refine 阶段。否则提示用户再次运行 `/sw:init`。
+确认 wiki.json process.phase 已更新为 `"init-finalizing"`。进入阶段三收尾。
 
-## Refine 阶段 — 跨模块一致性
+## 阶段三：收尾
 
-通过 Skill tool 调用 `sw:init-act-refine`，在独立的 subagent 上下文中执行。
+编排器直接执行全局性收尾工作。
 
-调用完成后，读取 `wiki.json` 确认 `process.phase` 已更新为 `"completed"`。
+### 1. 创建 flow 页面
 
-## 完成摘要
+根据各 act 返回摘要中的跨模块关系线索，创建跨模块业务流程页面（参考 `${CLAUDE_PLUGIN_ROOT}/templates/flow.md`）。
 
-在控制台输出：
+在 wiki.json 的 flows 中创建对应条目：modules（涉及的模块列表）、page。
 
-- **模块划分**：最终版与初始提案的差异
-- **创建/更新的页面清单**
-- **关键发现**（汇总各模块的 exports/conventions）
-- **低置信度区域**：标记供用户重点审查的页面或段落
+### 2. 完善 overview.md
 
-并建议：
+补充（参考 `${CLAUDE_PLUGIN_ROOT}/templates/overview.md`）：
+- 架构概览和系统分层
+- 模块间关系
+- 关键设计决策
+- 技术栈详情
 
+### 3. 完善 index.md
+
+完整版导航，包含所有已创建的页面。
+
+### 4. 最终更新
+
+- wiki.json process 最小化为 `{phase: "completed"}`，revision +1，更新 lastUpdated
+- 追加 log.md 条目
+
+### 5. 完成摘要
+
+输出：
+- **模块划分**：最终版与初始提案的差异（如有）
+- **创建的页面清单**
+- **关键发现**（汇总各模块摘要）
+- **低置信度区域**：标记供用户重点审查
+
+建议：
 - 运行 `/sw:lint` 进行健康检查
 - 人工审查低置信度页面
 - 后续源码变更时使用 `/sw:ingest` 增量同步
