@@ -1,14 +1,12 @@
 ---
 title: "{{功能名}}"
-type: feature
-created: 2026-04-10
-updated: 2026-04-10
-source: "相关源码路径"
+created: 2026-04-21T00:00:00Z
+updated: 2026-04-21T00:00:00Z
 tags: []
-related: []
-module: "[[所属模块名]]"
 guidelines: []
 issues: []
+depends: []
+source: ["src/path/file.ts", "src/path/model.ts"]
 ---
 
 # {{功能名}}
@@ -18,10 +16,6 @@ issues: []
 ## 概述
 
 > 用 1-2 句话描述这个功能做什么：用户能完成什么，系统达成什么。
-
-## 所属模块
-
-- [[所属模块名]] — 此 feature 所属的业务领域模块
 
 ## 涉及的源码文件
 
@@ -64,14 +58,14 @@ async function handleFeature(input: Input): Promise<Output> {
 
 ## 与其他 Feature 的关系
 
-- [[其他feature-a]] — 在什么场景下协作或依赖
-- [[其他feature-b]] — 共享了什么数据或逻辑
+- [[features/其他feature-a]] — 在什么场景下协作或依赖
+- [[features/其他feature-b]] — 共享了什么数据或逻辑
 
 ## 错误处理
 
 | 错误场景 | 处理方式 |
 |----------|----------|
-| —        | —        |
+| —        | — |
 
 ## 注意事项
 

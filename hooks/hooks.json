@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/validate-wiki-json.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/wiki-hook.js"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/validate-wiki-json.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/wiki-hook.js"
           }
         ]
       }

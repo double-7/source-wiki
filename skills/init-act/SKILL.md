@@ -15,12 +15,12 @@ agent: wiki-maintainer
 
 ### 1. 读取上下文
 
-读取 `docs/wiki/wiki.json`：
-- 从 `process.queue` 确认目标模块存在
-- 从 `modules[目标]` 获取 source 路径和 feature 预估
-- 从 `process.completed` 中已完成模块的页面了解依赖关系（可选，上下文允许时）
+读取 `docs/wiki/wiki.init.json`：
+- 从 `pending` 确认目标模块存在
+- 从 `plan[目标]` 获取 source 路径和 feature 预估
+- 从 `completed` 了解已完成模块（可选，上下文允许时）
 
-如果模块不在 queue 中，输出错误并停止。
+如果模块不在 pending 中，输出错误并停止。
 
 ### 2. 分析源码
 
@@ -64,26 +64,23 @@ agent: wiki-maintainer
 ### 5. 创建页面
 
 - 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 和 `${CLAUDE_PLUGIN_ROOT}/templates/module.md`
-- 创建 feature 页面（遵循建页三条件，包含提取到的 guidelines）
-- 填充 module 页面详细内容（包含提取到的 guidelines）
+- 创建 feature 页面（含完整 frontmatter：title、created、updated、source、tags、guidelines）
+- 创建 module 页面（含完整 frontmatter：title、created、updated、features 引用、tags、guidelines）
+- **一次性创建完整页面，不创建 stub**
+
+feature 页面的 `source` 字段填充映射的源码文件路径。
+module 页面的 `features` 字段填充 `[[features/页面名]]` 双链数组。
 
 ### 6. 自检
 
-回读刚创建的页面，确认描述与源码签名一致。只检查本模块内部。
+回读刚创建的页面，确认 frontmatter 与源码签名一致。只检查本模块内部。
 
-### 7. 更新 wiki.json
+### 7. 更新 wiki.init.json
 
-- queue 中该模块移入 completed
-- 创建 features 中每个新 feature 的条目：source（映射的源码文件）、page（wiki 页面路径）
-- 更新 modules[当前].features 列表
-- revision +1，更新 lastUpdated
-- 如果 queue 全部完成，process.phase 设为 `"init-finalizing"`
+- 从 pending 中移除该模块，追加到 completed
+- 保存 wiki.init.json
 
-### 8. 更新 index.md
-
-添加新页面条目。
-
-### 9. 返回摘要
+### 8. 返回摘要
 
 严格按以下格式返回：
 
@@ -92,7 +89,7 @@ agent: wiki-maintainer
 
 ### 创建的页面
 - docs/wiki/features/xxx.md → [src/file1.ts, src/file2.ts]
-- docs/wiki/modules/xxx.md → [src/xxx/]
+- docs/wiki/modules/xxx.md → features: [login, register]
 
 ### 关键发现
 - 发现 1

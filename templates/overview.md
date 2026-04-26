@@ -1,13 +1,14 @@
 ---
 title: "项目总览"
-type: architecture
-created: 2026-04-10
-updated: 2026-04-10
-source: "项目根目录"
+created: 2026-04-21T00:00:00Z
+updated: 2026-04-21T00:00:00Z
 tags: [overview]
-related: []
 guidelines: []
 issues: []
+depends: []
+flows: []
+modules: []
+features: []
 ---
 
 # 项目总览
@@ -38,7 +39,7 @@ issues: []
 
 | 模块 | 说明 |
 |------|------|
-| [[模块名]] | 一句话说明 |
+| [[modules/模块名]] | 一句话说明 |
 
 ## 架构概览
 

@@ -14,13 +14,30 @@ disable-model-invocation: true
 
 读取 `${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md` 加载共享规则。
 
+## 互斥检查
+
+Glob `docs/wiki/wiki.*.json`：
+- 有其他命令的临时文件 → 警告"wiki 可能处于不完整状态，结果可能不准确"，继续执行
+- 无临时文件 → 正常执行
+
 ## 查询流程
 
 ### 1. 结构化定位
 
-阅读 `docs/wiki/wiki.json`，利用 modules/features/flows 结构化索引精确定位相关知识区域。
+使用 query-wiki.js 按条件查询相关页面：
 
-关系类查询（依赖、引用关系）可直接从 wiki.json 回答，无需读页面。
+```bash
+# 按类型查询
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type feature
+
+# 按 tag 搜索
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field tags --contains <tag>
+
+# 按字段值过滤
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source --contains <file>
+```
+
+关系类查询（依赖、引用关系）可直接从 query-wiki.js 返回的 frontmatter 结构化数据回答。
 
 ### 2. 知识检索
 
@@ -28,7 +45,7 @@ disable-model-invocation: true
 
 ### 3. 回源精确定位
 
-如果 wiki 信息不足，利用 `features[X].source` 精确跳转到源码文件。只读必要的内容。
+如果 wiki 信息不足，利用 feature 页面的 `source` 字段精确跳转到源码文件。只读必要的内容。
 
 ### 4. 综合回答
 
@@ -39,14 +56,12 @@ disable-model-invocation: true
 如果回源时发现 wiki 描述与源码不一致，按修复边界处理：
 
 **简单事实矛盾**（单页面、源码可验证、影响明确）：
-
 1. 在回答中说明发现的矛盾
 2. AskUserQuestion 展示详情，询问是否修正
-3. 用户确认 → 执行 inline fix（修改页面 + 更新 wiki.json revision + 追加 log.md）
+3. 用户确认 → 执行 inline fix（修改页面 + 更新 frontmatter updated）
 4. 用户拒绝 → 写 issues 到页面 frontmatter
 
 **复杂不一致**（跨页面、需要全局判断）：
-
 1. 在回答中说明发现的不一致
 2. 写 issues 到相关页面 frontmatter
 3. 告知用户"已记录。运行 `/sw:lint` 将统一处理。"
@@ -64,16 +79,15 @@ disable-model-invocation: true
 - 包含流程梳理或设计洞察
 - 补充或修正了已有 wiki 页面信息
 
-询问时展示拟沉淀的完整内容（新增页面的全文，或更新页面的 diff）。
+询问时展示拟沉淀的完整内容。
 
 选项：
 - "确认沉淀"
 - "仅作参考"
-- "通过 lint 沉淀到更合适的层级"
 
 ### 沉淀路径
 
-根据洞察性质推荐目标（不限类型）：
+根据洞察性质推荐目标：
 
 | 洞察类型 | 推荐路径 |
 |---------|---------|
@@ -84,14 +98,12 @@ disable-model-invocation: true
 
 ### 用户确认沉淀后
 
-根据分析内容与已有 wiki 的关系执行：
+**新增页面**——创建页面（含完整 frontmatter），更新 index.md。
 
-**新增页面**——创建页面（含完整 frontmatter），更新 index.md。可以是任何类型（feature、flow、query 等）。
-
-**更新已有页面**——将内容写入目标页面，更新 updated 日期。
+**更新已有页面**——将内容写入目标页面，更新 frontmatter `updated`。
 
 然后：
-- 更新 wiki.json：revision +1；如涉及新 feature/flow，写入对应条目
+- 更新 index.md 的 `updated` 为当前秒级 ISO 时间戳
 - 追加 log.md
 
 ### 不建议沉淀

@@ -16,14 +16,14 @@ disable-model-invocation: true
 
 ## 状态判断
 
-读取 `docs/wiki/wiki.json`：
+Glob `docs/wiki/wiki.*.json`：
 
 | 状态 | 动作 |
 |------|------|
-| 不存在 | 执行阶段一（扫描规划） |
-| `process.phase == "init-running"` | 从断点继续（跳到阶段二） |
-| `process.phase == "completed"` | AskUserQuestion：重新全量分析（覆盖）还是用 `/sw:ingest` 增量？ |
-| 其他 phase | 提示"另一个操作进行中（{phase}），请先完成" |
+| 有 wiki.init.json | 中断恢复（AskUserQuestion 三选项：恢复/保留重建/完全重来） |
+| 有其他 wiki.*.json | 拒绝："另一个操作正在进行中。请先完成。" |
+| 有 wiki 页面但无临时文件 | AskUserQuestion：重新全量分析（覆盖）还是用 `/sw:ingest` 增量？ |
+| 空目录 | 执行阶段一（扫描规划） |
 
 ## 阶段一：扫描规划
 
@@ -48,36 +48,20 @@ disable-model-invocation: true
 - 确定处理顺序（按依赖关系从底层到上层）
 - 对模糊区域标注低置信度
 
-### 3. 创建 wiki 骨架
+### 3. 创建 wiki.init.json
 
-创建以下文件：
-
-1. **wiki.json**：
 ```json
 {
-  "revision": 1,
-  "lastUpdated": "<now>",
-  "process": {
-    "phase": "init-running",
-    "queue": ["<所有模块>"],
-    "completed": []
-  },
-  "modules": {
+  "pending": ["<所有模块名>"],
+  "completed": [],
+  "plan": {
     "<模块名>": {
-      "source": "<源码路径>",
-      "features": [],
-      "page": "docs/wiki/modules/<模块名>.md"
+      "source": "src/auth/",
+      "features": ["login", "register"]
     }
-  },
-  "features": {},
-  "flows": {}
+  }
 }
 ```
-
-2. **index.md**：导航骨架（参考 `${CLAUDE_PLUGIN_ROOT}/templates/index.md`）
-3. **overview.md**：骨架版（参考 `${CLAUDE_PLUGIN_ROOT}/templates/overview.md`），填入项目名和技术栈
-4. **各模块 stub 页面**：仅 frontmatter + 一句话概述（参考 `${CLAUDE_PLUGIN_ROOT}/templates/module.md`）
-5. **log.md**：初始条目
 
 ### 4. 检查点 — 用户确认
 
@@ -91,25 +75,34 @@ AskUserQuestion 展示模块划分方案：
 >
 > 此划分是否合理？可以调整模块的合并、拆分或重命名。
 
-用户确认后：如需调整则更新 wiki.json，进入阶段二。
+用户确认后：如需调整则更新 wiki.init.json，进入阶段二。
 
 ## 阶段二：逐模块委派
 
 ### 编排流程
 
-Loop 开始时读 wiki.json 一次，获取 process.queue 和 process.completed。
+读取 wiki.init.json 获取 pending 列表。按顺序逐个处理：
 
-按 queue 顺序逐个处理：
+```
+loop:
+  1. Skill tool 调用 sw:init-act {模块名}
+  2. Grep wiki.init.json 确认该模块已移至 completed
+     - 确认成功 → 继续下一个
+     - 确认失败 → 进入 catch
+  3. 每完成 2-3 个模块输出简要进度（不暂停等待）
 
-1. **调用 act**：Skill tool 调用 `sw:init-act`，参数为目标模块名
-2. **轻量确认**：Grep wiki.json 搜索该模块名确认已在 completed 中
-3. **进度输出**：每完成 2-3 个模块输出简要进度（不暂停等待）
-4. **继续下一个**：按初始读取的 queue 列表继续
-5. **异常处理**：只有当 act 返回异常时，才 Read wiki.json 评估状态
+catch:
+  1. 重试：重新派发 init-act（fork 获得新上下文）
+  2. 再次 Grep 确认
+     - 成功 → 继续下一个
+     - 仍失败 → Edit 从 pending 移除该模块，记录为跳过，继续下一个
+```
+
+只有当 act 返回异常时，才 Read wiki.init.json 评估状态。
 
 ### 全部模块完成
 
-确认 wiki.json process.phase 已更新为 `"init-finalizing"`。进入阶段三收尾。
+pending 为空，进入阶段三收尾。
 
 ## 阶段三：收尾
 
@@ -119,8 +112,6 @@ Loop 开始时读 wiki.json 一次，获取 process.queue 和 process.completed�
 
 根据各 act 返回摘要中的跨模块关系线索，创建跨模块业务流程页面（参考 `${CLAUDE_PLUGIN_ROOT}/templates/flow.md`）。
 
-在 wiki.json 的 flows 中创建对应条目：modules（涉及的模块列表）、page。
-
 ### 2. 完善 overview.md
 
 补充（参考 `${CLAUDE_PLUGIN_ROOT}/templates/overview.md`）：
@@ -129,16 +120,24 @@ Loop 开始时读 wiki.json 一次，获取 process.queue 和 process.completed�
 - 关键设计决策
 - 技术栈详情
 
-### 3. 完善 index.md
+### 3. 创建 index.md、log.md、.gitignore
 
-完整版导航，包含所有已创建的页面。
+- **index.md**：完整版导航，包含所有已创建的页面双链引用
+- **log.md**：初始条目（格式见 wiki-maintainer.md 日志格式）
+- **.gitignore**：处理排除 wiki.*.json：
+  - 不存在 → 创建，内容为 `wiki.*.json`
+  - 已存在且不含该规则 → 追加
+  - 已存在且已含该规则 → 跳过
 
-### 4. 最终更新
+### 4. 清理
 
-- wiki.json process 最小化为 `{phase: "completed"}`，revision +1，更新 lastUpdated
-- 追加 log.md 条目
+删除 `docs/wiki/wiki.init.json`。
 
-### 5. 完成摘要
+### 5. 更新 index.md.updated
+
+将 index.md 的 `updated` 字段更新为当前秒级 ISO 时间戳（与 log.md 写入同步）。
+
+### 6. 完成摘要
 
 输出：
 - **模块划分**：最终版与初始提案的差异（如有）

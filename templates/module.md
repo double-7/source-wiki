@@ -1,13 +1,12 @@
 ---
 title: "{{模块名}}"
-type: module
-created: 2026-04-10
-updated: 2026-04-10
-source: "相关源码路径"
+created: 2026-04-21T00:00:00Z
+updated: 2026-04-21T00:00:00Z
 tags: []
-related: []
 guidelines: []
 issues: []
+depends: []
+features: ["[[features/feature-a]]", "[[features/feature-b]]"]
 ---
 
 # {{模块名}}
@@ -23,8 +22,8 @@ issues: []
 
 | Feature | 说明 |
 |---------|------|
-| [[feature-a]] | 一句话描述此功能 |
-| [[feature-b]] | 一句话描述此功能 |
+| [[features/feature-a]] | 一句话描述此功能 |
+| [[features/feature-b]] | 一句话描述此功能 |
 
 > 列出属于此模块的所有 feature 页面。
 
@@ -41,12 +40,12 @@ issues: []
 
 ### 依赖（本模块使用了谁）
 
-- [[其他模块A]] — 用于什么目的
+- [[modules/其他模块A]] — 用于什么目的
 - `外部包名` — 用于什么目的
 
 ### 被依赖（谁使用了本模块）
 
-- [[其他模块B]] — 在什么场景下使用本模块
+- [[modules/其他模块B]] — 在什么场景下使用本模块
 
 ## 共享的数据模型
 

@@ -1,13 +1,13 @@
 ---
 title: "{{流程名}}"
-type: flow
-created: 2026-04-10
-updated: 2026-04-10
-source: "相关源码路径"
+created: 2026-04-21T00:00:00Z
+updated: 2026-04-21T00:00:00Z
 tags: []
-related: []
 guidelines: []
 issues: []
+depends: []
+modules: ["[[modules/模块A]]", "[[modules/模块B]]"]
+features: ["[[features/feature-a]]", "[[features/feature-b]]"]
 ---
 
 # {{流程名}}
@@ -37,7 +37,7 @@ flowchart TD
 
 - **触发条件**：什么触发了这一步
 - **处理逻辑**：这一步做了什么
-- **涉及的功能**：[[feature-a]]、[[feature-b]]
+- **涉及的功能**：[[features/feature-a]]、[[features/feature-b]]
 - **输出/状态变化**：这一步产生了什么变化
 
 ### 2. 步骤名称
@@ -48,15 +48,15 @@ flowchart TD
 
 | 模块 | 角色 |
 |------|------|
-| [[模块A]] | 提供哪些能力参与此流程 |
-| [[模块B]] | 提供哪些能力参与此流程 |
+| [[modules/模块A]] | 提供哪些能力参与此流程 |
+| [[modules/模块B]] | 提供哪些能力参与此流程 |
 
 ## 涉及的功能（Features）
 
 | Feature | 在流程中的角色 |
 |---------|----------------|
-| [[feature-a]] | 负责什么处理 |
-| [[feature-b]] | 负责什么处理 |
+| [[features/feature-a]] | 负责什么处理 |
+| [[features/feature-b]] | 负责什么处理 |
 
 > 列出此流程中实际执行工作的 feature 页面。Flow 本身不描述实现细节，实现细节在对应的 feature 页面中。
 
@@ -66,7 +66,7 @@ flowchart TD
 
 | 错误场景 | 处理方式 |
 |----------|----------|
-| —        | —        |
+| —        | — |
 
 ## 性能考量
 
