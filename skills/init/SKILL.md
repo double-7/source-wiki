@@ -1,6 +1,6 @@
 ---
 name: sw:init
-description: "全量分析：扫描源码 → 模块分析 → 收尾。自动检测状态从断点继续"
+description: "全量分析：扫描源码 → 逐模块处理 → 收尾。自动检测状态从断点继续"
 argument-hint: "[source-path]"
 user-invocable: true
 disable-model-invocation: true
@@ -12,7 +12,7 @@ disable-model-invocation: true
 
 ## 前置步骤
 
-读取 `${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md` 加载共享规则（知识模型、页面格式、修改协议、修复边界）。
+读取 `${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md` 加载共享规则（知识模型、frontmatter schema、页面格式、修改协议、修复边界）。
 
 ## 状态判断
 
@@ -23,11 +23,9 @@ Glob `docs/wiki/wiki.*.json`：
 | 有 wiki.init.json | 中断恢复（AskUserQuestion 三选项：恢复/保留重建/完全重来） |
 | 有其他 wiki.*.json | 拒绝："另一个操作正在进行中。请先完成。" |
 | 有 wiki 页面但无临时文件 | AskUserQuestion：重新全量分析（覆盖）还是用 `/sw:ingest` 增量？ |
-| 空目录 | 执行阶段一（扫描规划） |
+| 空目录 | 进入阶段一 |
 
 ## 阶段一：扫描规划
-
-编排器直接执行轻量扫描，不需要 fork。
 
 ### 1. 扫描源码元数据
 
@@ -36,19 +34,23 @@ Glob `docs/wiki/wiki.*.json`：
 1. **目录结构**：Glob 源码目录（depth 3），排除 node_modules/、vendor/、dist/、build/、out/、.git/、docs/wiki/
 2. **包管理文件**（选最相关的一个）：Read package.json / pom.xml / go.mod / Cargo.toml / pyproject.toml
 3. **README.md**：Read
-4. **导出签名**：Grep `export` 语句（签名行，不读文件内容）。超过 200 行匹配时按目录分批
-5. **依赖关系**：Grep `import` / `require` 语句（签名行）。只扫入口文件和桶文件（index.ts / mod.ts）
-6. **测试文件名**：Glob `*.test.*` / `*.spec.*` / `*_test.*`
+4. **导出签名**：Grep `export` 语句（签名行，不读文件内容）
+5. **测试文件名**：Glob `*.test.*` / `*.spec.*` / `*_test.*`
 
 ### 2. 综合分析
 
 基于扫描结果：
-- 确定模块边界（依据：目录结构、export 聚合、import 依赖）
+
+- **确定模块边界**（依据：目录结构）
+  - 有子目录：每个子目录为一个模块
+  - 无子目录（平目录）：所有文件视为单一模块
 - 为每个模块列出预估的 features、keyFiles
-- 确定处理顺序（按依赖关系从底层到上层）
-- 对模糊区域标注低置信度
+- 标注低置信度区域
+- 统计源码文件总量，确定委派策略（≤ 50 主会话内联，> 50 可委派 Agent tool，最多 5 agent）
 
 ### 3. 创建 wiki.init.json
+
+Schema 见 `docs/design.local.md` §4.5：
 
 ```json
 {
@@ -63,42 +65,86 @@ Glob `docs/wiki/wiki.*.json`：
 }
 ```
 
-### 4. 检查点 — 用户确认
+### 4. 检查点 -- 用户确认
 
 AskUserQuestion 展示模块划分方案：
 
 > **模块划分方案**：
-> - auth (src/auth/, ~12 files) → features: login, register, token-refresh
-> - order (src/order/, ~8 files) → features: create, track
+> - auth (src/auth/, ~12 files) -> features: login, register, token-refresh
+> - order (src/order/, ~8 files) -> features: create, track
 >
-> **处理顺序**：auth → order → payment（按依赖关系从底层到上层）
+> **委派策略**：源码共 ~45 文件，主会话内联处理
 >
 > 此划分是否合理？可以调整模块的合并、拆分或重命名。
 
 用户确认后：如需调整则更新 wiki.init.json，进入阶段二。
 
-## 阶段二：逐模块委派
+## 阶段二：逐模块处理
 
-### 编排流程
+读取 wiki.init.json 获取 pending 列表，按阶段一确定的委派策略执行。
 
-读取 wiki.init.json 获取 pending 列表。按顺序逐个处理：
+**委派策略**（文件总量 > 50 时启用）：
+- 按模块关联度分组，最多 5 agent，顺序派发
+- 每个 agent 完成后主会话更新 wiki.init.json，再派发下一个
 
-```
-loop:
-  1. Skill tool 调用 sw:init-act {模块名}
-  2. Grep wiki.init.json 确认该模块已移至 completed
-     - 确认成功 → 继续下一个
-     - 确认失败 → 进入 catch
-  3. 每完成 2-3 个模块输出简要进度（不暂停等待）
+### 1. 分析源码
 
-catch:
-  1. 重试：重新派发 init-act（fork 获得新上下文）
-  2. 再次 Grep 确认
-     - 成功 → 继续下一个
-     - 仍失败 → Edit 从 pending 移除该模块，记录为跳过，继续下一个
-```
+按以下策略读取源码，目标：**~70% 准确率的知识骨架**——结构正确比细节完美更重要。
 
-只有当 act 返回异常时，才 Read wiki.init.json 评估状态。
+**必读（Tier 1）**：
+- Grep 模块内 export 签名和 import 依赖
+- 读类型定义、接口定义
+- 读测试文件名和 describe 块标题
+- 读 JSDoc / 注释 / docstring
+
+**按需（Tier 2）**：
+- Tier 1 基础上选择性读取最复杂的 2-3 个文件（导出最多、被引用最多的）
+
+**不读**：函数体实现细节、测试断言、vendor / 生成 / 样板代码
+
+**原则**：只写人类不容易从代码直接看到的内容（协作关系、设计意图、隐式约定）。不确定边界时宁可稍大。
+
+### 2. 确定 features
+
+按建页标准划分 feature：
+
+- 有明确目的 + 能独立理解 -> 建 feature 页面
+- 不满足 -> 内联到所属模块页面
+- 太大（多目标） -> 拆分
+
+### 3. 提取 guidelines
+
+从源码中识别明确的设计决策，写入页面 guidelines：
+- 架构选择（如"事件驱动"/"请求-响应"）
+- 模块间通信约定
+- 数据约束（如"所有 entity 有 createdAt/updatedAt"）
+- 命名约定
+
+每条 guideline 一句话，记录"为什么这样做"。仅提取代码中明确体现的决策，不推断设计意图。
+
+### 4. 创建页面
+
+- 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 和 `${CLAUDE_PLUGIN_ROOT}/templates/module.md`
+- 创建 feature 页面（含完整 frontmatter：title、created、updated、source、tags、guidelines）
+- 创建 module 页面（含完整 frontmatter：title、created、updated、features 引用、tags、guidelines）
+- **一次性创建完整页面，不创建 stub**
+
+feature 页面的 `source` 字段填充映射的源码文件路径。
+module 页面的 `features` 字段填充 `[[features/页面名]]` 双链数组。
+
+### 5. 自检
+
+回读刚创建的页面，确认 frontmatter 与源码签名一致。只检查本模块内部。
+
+### 6. 更新 wiki.init.json
+
+从 pending 中移除该模块，追加到 completed。保存 wiki.init.json。
+
+**Agent tool 委派模式**：agent 返回结果需包含：
+- 跨模块关系线索（如"auth 模块导出 AuthService，被 order 模块引用"）
+- 低置信度区域
+
+主会话收集后用于阶段三。主会话内联模式下此信息在上下文中隐式保留。
 
 ### 全部模块完成
 
@@ -106,15 +152,13 @@ pending 为空，进入阶段三收尾。
 
 ## 阶段三：收尾
 
-编排器直接执行全局性收尾工作。
-
 ### 1. 创建 flow 页面
 
-根据各 act 返回摘要中的跨模块关系线索，创建跨模块业务流程页面（参考 `${CLAUDE_PLUGIN_ROOT}/templates/flow.md`）。
+根据阶段二收集的跨模块关系线索，创建跨模块业务流程页面（参考 `${CLAUDE_PLUGIN_ROOT}/templates/flow.md`）。
 
-### 2. 完善 overview.md
+### 2. 创建 overview.md
 
-补充（参考 `${CLAUDE_PLUGIN_ROOT}/templates/overview.md`）：
+创建项目总览页面（参考 `${CLAUDE_PLUGIN_ROOT}/templates/overview.md`）：
 - 架构概览和系统分层
 - 模块间关系
 - 关键设计决策
@@ -124,25 +168,24 @@ pending 为空，进入阶段三收尾。
 
 - **index.md**：完整版导航，包含所有已创建的页面双链引用
 - **log.md**：初始条目（格式见 wiki-maintainer.md 日志格式）
-- **.gitignore**：处理排除 wiki.*.json：
-  - 不存在 → 创建，内容为 `wiki.*.json`
-  - 已存在且不含该规则 → 追加
-  - 已存在且已含该规则 → 跳过
+- **.gitignore**：确保排除 wiki.*.json：
+  - 不存在 -> 创建，内容为 `wiki.*.json`
+  - 已存在且不含该规则 -> 追加
+  - 已存在且已含该规则 -> 跳过
+  - 如 docs/wiki/ 已被 git track 且含 wiki.*.json -> 提示用户手动 `git rm --cached`
 
-### 4. 清理
-
-删除 `docs/wiki/wiki.init.json`。
+### 4. 删除 wiki.init.json
 
 ### 5. 更新 index.md.updated
 
-将 index.md 的 `updated` 字段更新为当前秒级 ISO 时间戳（与 log.md 写入同步）。
+将 index.md 的 `updated` 字段更新为当前秒级 ISO 时间戳。
 
 ### 6. 完成摘要
 
 输出：
 - **模块划分**：最终版与初始提案的差异（如有）
 - **创建的页面清单**
-- **关键发现**（汇总各模块摘要）
+- **关键发现**（汇总各模块分析结果）
 - **低置信度区域**：标记供用户重点审查
 
 建议：

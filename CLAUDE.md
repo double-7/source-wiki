@@ -30,30 +30,22 @@ LLM 生成的 wiki 天然存在准确率上限（隐式约定、复杂控制流�
 ### 文件结构
 
 - `agents/wiki-maintainer.md` — 纯 WHAT：知识模型、frontmatter schema、页面格式、临时文件规范、共享不变量
-- `skills/` — 纯 HOW：7 个 SKILL.md（4 编排器 + 3 act）
-  - `init/SKILL.md` — 编排器：扫描规划 → 逐模块委派 → 收尾
-  - `init-act/SKILL.md` — act：分析单个模块源码，创建 wiki 页面
-  - `ingest/SKILL.md` — 编排器：变更检测 → 影响分析 → 逐 target 委派
-  - `ingest-act/SKILL.md` — act：处理单个变更目标
-  - `lint/SKILL.md` — 编排器：规划维度 → 委派检查 → 汇总报告
-  - `lint-act/SKILL.md` — act：执行维度检查（freshness/coverage/consistency/integrity）
-  - `query/SKILL.md` — 直接执行，无 REACT
+- `skills/` — 纯 HOW：4 个 SKILL.md
+  - `init/SKILL.md` — 扫描规划 → 逐模块处理（可委派 Agent tool）→ 收尾
+  - `ingest/SKILL.md` — 变更检测 → 影响分析 → 逐 target 处理
+  - `lint/SKILL.md` — 规划维度 → 逐维度检查 → 汇总报告
+  - `query/SKILL.md` — 直接执行
 - `templates/` — 5 个页面模板（index、overview、module、feature、flow）
 - `hooks/wiki-hook.js` — 统一校验（临时文件 schema + frontmatter 按目录校验）
 - `scripts/query-wiki.js` — frontmatter 结构化查询脚本
 - `libs/js-yaml-4.1.1.min.js` — 内嵌 YAML 解析库（MIT）
 - `.claude-plugin/plugin.json` — 插件清单
 
-### REACT 编排模式
+### 单会话自包含流程
 
-init、ingest、lint 共享编排模式（具体实现见各 SKILL.md）：
+init、ingest、lint 各自为单会话自包含流程，使用 wiki.*.json 追踪进度和中断恢复。init 在源码文件总量 > 50 时可使用 Agent tool 委派模块处理（按模块关联度分组，最多 5 agent，顺序派发）。
 
-1. 编排器通过 Skill tool 调用 act，act 在 fork 上下文中自包含执行
-2. 编排器用 Grep 轻量确认 act 完成，不 Read 全文件
-3. act 确认失败时重试 1 次（fork 新上下文）；仍失败则跳过该项继续，最终报告跳过列表
-4. 完成后删除临时文件，编排器更新 index.md + 追加 log.md
-
-query 不使用此模式，直接在用户会话中执行。
+query 直接在用户会话中执行。
 
 ## 测试
 
@@ -71,9 +63,10 @@ query 不使用此模式，直接在用户会话中执行。
 ## 注意事项
 
 - 修改 wiki-maintainer.md 时只添加规则/格式/约束（WHAT），执行流程/状态转换（HOW）放对应 SKILL.md
+- 文档三层一致性：`docs/plan.local.md`（方案）→ `skills/*/SKILL.md`（实现）→ `docs/design.local.md`（设计），改动需同步三层
+- SKILL.md 是 LLM prompt：不写 turn 计数估算、不展开 wiki-maintainer.md 已定义的规则（如修复边界）；保留具体的 bash 命令和 JSON 示例
 - 临时文件 schema（wiki.init.json、wiki.ingest.json、wiki.lint.json）在设计文档统一定义，SKILL.md 直接引用
 - 多个 SKILL.md 间的小量重复（~5 句）可接受，不抽取为共享 scheme
 - 模板中引用路径用 `${CLAUDE_PLUGIN_ROOT}/templates/`（运行时变量）
 - Wiki 输出路径固定为 `docs/wiki/`（相对于被分析的目标项目）
 - 页面类型由文件所在目录确定，模板中不含 `type` 字段
-- agent（含 fork act）无法检测自身剩余上下文或 maxTurns，编排指令不能依赖"容量检测后再保存"

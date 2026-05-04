@@ -1,12 +1,12 @@
 ---
 name: sw:lint
-description: "对 wiki 知识库进行健康检查。编排器模式：规划维度、委派检查、汇总报告"
+description: "对 wiki 知识库进行健康检查。单会话自包含流程：规划维度、逐维度检查、汇总报告"
 argument-hint: "[module-name]"
 user-invocable: true
 disable-model-invocation: true
 ---
 
-REACT 编排器——对 wiki 知识库进行健康检查。支持全量和定向分析。
+对 wiki 知识库进行健康检查。支持全量和定向分析。
 
 ## 前置步骤
 
@@ -42,6 +42,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 
 ### 3. 创建 wiki.lint.json
 
+Schema 引用 design.local.md §4.7：
+
 ```json
 {
   "scope": "",
@@ -59,24 +61,73 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 
 无需检查点（lint 是只读检查，低风险）。
 
-## Loop 阶段
+## issues 消费
 
-读取 wiki.lint.json 获取 dimensions 状态。
+在维度检查前执行。使用 query-wiki.js 查找有 issues 的页面：
 
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field issues --not-empty
 ```
-loop:
-  1. Skill tool 调用 sw:lint-act（无参数，lint-act 自主处理所有 pending 维度）
-  2. Grep wiki.lint.json 确认维度完成情况
-  3. 记录 act 返回的摘要
-  4. 仍有 pending → 回到步骤 1
-  5. 全部 completed → 进入 Report
 
-catch（步骤 2 确认无新维度完成时触发）：
-  1. 重试：重新派发 lint-act（fork 获得新上下文）
-  2. 再次检查维度完成情况
-     - 有进展 → 回到 loop 步骤 4
-     - 仍无进展 → 跳过剩余维度，进入 Report（附跳过说明）
+对每个有 issues 的页面，逐个验证：
+
+- **源码可验证** → 修复并清除 issue
+- **需要用户判断** → 升级为 finding（fixType: content），追加到 wiki.lint.json 的 findings
+- **问题已不存在** → 直接清除 issue
+
+修复时遵循修改协议：读 guidelines → 修复 → 更新 updated。
+
+## 维度检查
+
+对 wiki.lint.json 中每个 pending 维度，按顺序执行：freshness → coverage → integrity → consistency。每完成一个维度即时保存。
+
+### freshness — 源码路径有效性
+
+使用 query-wiki.js 获取所有 feature 页面的 source 字段：
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type feature
 ```
+
+Glob 验证每个 source 路径是否存在。不存在的标记为 finding：
+
+- severity: high
+- fixType: none
+- fixPlan: "源码文件已删除或移动"
+
+### coverage — 覆盖完整性
+
+- 扫描所有 wiki 页面文件
+- 检查：正文中 `[[dir/name]]` 双链都有对应的实际文件
+- 检查：无孤立页面（每个页面至少被一个其他页面或 index.md 引用）
+- 缺失的标记为 finding，severity: medium
+
+### integrity — 数据完整性
+
+使用 query-wiki.js --dump 获取全量 frontmatter：
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
+```
+
+检查：
+
+- 每个页面 frontmatter 必需字段完整
+- depends 和类型命名字段的双链格式正确
+- 无遗留的旧格式字段（type、related）
+
+### consistency — 内容一致性
+
+- 读取多个页面内容进行交叉比对
+- 同一概念在不同页面术语一致
+- 页面内容匹配其层级（如 flow 页面不应描述单 feature 的内部实现）
+- 交叉引用有效：depends 引用目标页面存在；下级引用目标页面存在
+
+### 即时保存
+
+每完成一个维度，追加 findings 并保存 wiki.lint.json。每条 finding 包含：dimension、severity（high/medium/low）、page、description、fixType（safe/content/none）、fixPlan。safe 类型直接修复（更新页面内容和 frontmatter）。
+
+确保中断后已完成的维度结果不丢失。
 
 ## Report 阶段
 
@@ -86,7 +137,7 @@ catch（步骤 2 确认无新维度完成时触发）：
 
 ### 2. 按 fixType 分组
 
-- **safe（已修复）**：lint-act 已直接执行，报告中标注"已修复"
+- **safe（已修复）**：维度检查中已直接执行，报告中标注"已修复"
 - **content（待确认）**：需要用户确认的内容修复方案
 - **none（仅报告）**：无法自动修复的问题
 

@@ -250,7 +250,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 ### 日志格式
 
-`docs/wiki/log.md` 是 append-only 变更日志，新条目追加在文件末尾。由编排器在命令完成后写入，act 不写 log.md。
+`docs/wiki/log.md` 是 append-only 变更日志，新条目追加在文件末尾。由命令完成后写入。
 
 ```markdown
 ## [2026-04-21] init | 用户认证模块
@@ -268,9 +268,9 @@ log.md 无 frontmatter，不受 Hook 校验。
 
 index.md 承担两个角色：
 1. **人类导航**：结构化页面目录，双链引用
-2. **人类可读时间戳**：`updated` 字段由编排器在收尾时维护
+2. **人类可读时间戳**：`updated` 字段由命令在收尾时维护
 
-**`updated` 字段由编排器在命令完成后更新**（与 log.md 写入同步），不由 Hook 自动维护。
+**`updated` 字段由命令完成后更新**（与 log.md 写入同步），不由 Hook 自动维护。
 
 **index.md 是系统关键文件，不可删除。**
 
@@ -297,8 +297,8 @@ Glob docs/wiki/wiki.*.json
 | 阶段 | 行为 |
 |------|------|
 | 启动 | 检查是否存在其他 wiki.*.json，有则拒绝 |
-| 运行 | 编排器和 act 读写临时文件，推进状态 |
-| 完成 | 删除 wiki.<cmd>.json，编排器更新 index.md.updated + 追加 log.md |
+| 运行 | 命令读写临时文件，推进状态 |
+| 完成 | 删除 wiki.<cmd>.json，命令更新 index.md.updated + 追加 log.md |
 | 中断 | 临时文件保留在磁盘，下次启动可恢复 |
 
 **状态即存在性**：文件不存在 = 未运行，文件存在 = 运行中/中断。
