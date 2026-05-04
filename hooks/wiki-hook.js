@@ -129,7 +129,7 @@ function validateLint(json) {
 const FM_REQUIRED = {
   feature:       ['title', 'created', 'updated', 'source', 'tags'],
   module:        ['title', 'created', 'updated', 'features', 'tags'],
-  flow:          ['title', 'created', 'updated', 'modules', 'tags'],
+  flow:          ['title', 'created', 'updated', 'tags'],
   architecture:  ['title', 'created', 'updated', 'tags'],
   query:         ['title', 'created', 'updated', 'tags'],
   index:         ['title', 'created', 'updated']
@@ -190,9 +190,6 @@ function validateFrontmatter(fm, pageType) {
       if (Array.isArray(fm[field])) {
         if (pageType === 'module' && field === 'features' && fm[field].length === 0) {
           e.push('features must not be empty');
-        }
-        if (pageType === 'flow' && field === 'modules' && fm[field].length < 2) {
-          e.push('modules must have at least 2 elements');
         }
       }
     }

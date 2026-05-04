@@ -6,7 +6,7 @@ tags: []
 guidelines: []
 issues: []
 depends: []
-modules: ["[[modules/模块A]]", "[[modules/模块B]]"]
+modules: []
 features: ["[[features/feature-a]]", "[[features/feature-b]]"]
 ---
 
@@ -16,7 +16,7 @@ features: ["[[features/feature-a]]", "[[features/feature-b]]"]
 
 ## 概述
 
-> 用 1-2 句话描述这个业务流程的目的：从哪里开始，到哪里结束，达成什么业务目标。
+> 用 1-2 句话描述这个协作流程的目的：从哪里开始，到哪里结束，达成什么业务目标。
 
 ## 流程图
 

@@ -21,20 +21,20 @@ memory: project
 知识库采用自底向上的四级层级：
 
 ```
-architecture  ← 系统全局（技术栈、部署、API 契约）
+architecture  ← 基于 feature/module/flow 归纳产生的系统级文档
     ↑
-flow          ← 跨模块业务流程（必须涉及 ≥2 模块）
+flow          ← 描述程序如何完成业务目标的协作流程
     ↑
-module        ← 按业务领域聚合的功能集合
+module        ← 代码实现视角的归纳分组（不限于业务领域）
     ↑
-feature       ← 最小原子单元（一个具体能力）
+feature       ← 实现明确目的的最小能力单元
 ```
 
 每一层只描述属于自己层级的内容，不越级：
 - **Feature**：一个具体能力如何实现，涉及哪些文件和代码
-- **Module**：一个业务领域包含哪些 feature，共享什么数据，模块间依赖
-- **Flow**：一个业务目标如何通过多个 module 和 feature 的协作来完成
-- **Architecture**：项目整体的部署方式、技术栈、API 契约等系统级文档
+- **Module**：一个归纳分组包含哪些 feature，共享什么数据，模块间依赖
+- **Flow**：一个业务目标如何通过多个能力单元的协作来完成
+- **Architecture**：基于底层页面归纳产生的系统级文档
 
 ### 目录结构
 
@@ -48,7 +48,7 @@ docs/wiki/
 ├── .gitignore            # 排除 wiki.*.json
 ├── modules/              # 模块文档
 ├── features/             # 功能文档
-├── flows/                # 跨模块业务流程
+├── flows/                # 协作流程
 ├── architectures/        # 项目架构级文档
 └── queries/              # 查询沉淀
 ```
@@ -59,10 +59,10 @@ docs/wiki/
 
 | 类型 | 定义 | 粒度标准 | 关键约束 |
 |------|------|---------|---------|
-| feature | 最小原子单元，一个具体的端到端能力 | 建页三条件（缺一则内联）：①一句话目标 ②≥2文件协作 ③独立可理解 | 太小（单文件/纯工具）→内联到所属页面；太大（多目标）→拆分 |
-| module | 垂直业务领域，聚合相关 feature | 包含多个相关 feature（多对多组合） | 记录领域划分和共享数据，不重复实现细节；类和函数不单独建页 |
-| flow | 跨模块业务流程 | 必须涉及 ≥2 模块 | 单模块流程写在 feature 页面中；flow 引用涉及的 module 和 feature |
-| architecture | 系统级视图 | 项目整体 | 不重复 feature/module 实现细节（如 API 只记录契约） |
+| feature | 实现明确目的的最小能力单元 | 建页标准：有明确目的 + 能独立理解 | 太小（无明确目的）→内联到所属页面；太大（多目的）→拆分 |
+| module | 代码实现视角的归纳分组 | 包含相关 feature（多对多组合） | 分组依据不限业务领域——可以是技术关注点、基础设施、横切功能、共享工具 |
+| flow | 描述业务目标的多能力单元协作流程 | 描述一个完整业务目的 + 涉及多个能力单元（feature/module）的协作 | flow 引用涉及的 module 和 feature（均为可选） |
+| architecture | 基于 feature/module/flow 归纳的系统级文档 | 项目整体 | 不重复 feature/module 实现细节；从底层归纳产生，非独立编写 |
 
 ## Frontmatter Schema
 
@@ -84,7 +84,7 @@ issues: []
 | title | string | 人类可读标题，与文件名语义一致 |
 | created | string | ISO 8601 秒级时间戳（`2026-04-21T14:30:00Z`） |
 | updated | string | ISO 8601 秒级时间戳，每次修改时更新 |
-| tags | string[] | 自由标签，分类和检索 |
+| tags | string[] | 自由标签，分类和检索。module 可用关注点类型标签（如 `infrastructure`、`cross-cutting`、`utility`）辅助分类 |
 | guidelines | string[] | 设计决策约束，记录为什么这样做 |
 | issues | string[] | 待处理问题，格式：`问题描述 — 来源 日期` |
 
@@ -127,7 +127,7 @@ features: ["[[features/login]]", "[[features/token-refresh]]"]
 depends: []
 ```
 
-- `modules`：涉及的 module 页面（**必需，≥2 个双链**）
+- `modules`：涉及的 module 页面（**可选，双链数组**）
 - `features`：涉及的 feature 页面（可选）
 - `depends`：依赖的其他 flow 页面（可选）
 
@@ -210,6 +210,10 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 - issues 记录待处理问题，供 lint 统一消费。非 lint 操作不处理 issues
 - issues 是临时字段——写入后由 lint 在下次扫描时独立验证、修复并清除
 - 跨页面问题写在当前命令能直接编辑的页面上
+
+### 依赖驱动拆分
+
+当 feature-A 内的某个能力被 feature-B 依赖时，该能力应拆分为独立 feature-C。A 和 B 都通过 depends 引用 C。此原则在 init 建立初始边界后，由 ingest/lint 在 wiki 生命周期中持续检测。
 
 ### 修改协议
 
