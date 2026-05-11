@@ -50,8 +50,6 @@ Glob `docs/wiki/wiki.*.json`：
 
 ### 3.3. 创建 wiki.init.json
 
-Schema 见 `docs/design.local.md` §4.5：
-
 ```json
 {
   "pending": ["<所有模块名>"],
@@ -64,6 +62,16 @@ Schema 见 `docs/design.local.md` §4.5：
   }
 }
 ```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| pending | string[] | 待处理模块名列表 |
+| completed | string[] | 已完成模块名列表 |
+| plan | object | 模块规划，Phase 1 写入，Phase 2 只读 |
+| plan[X].source | string | 模块对应的源码目录 |
+| plan[X].features | string[] | 预估 feature 名称列表 |
+
+**状态流转**：Phase 1 扫描后写入 plan + pending → 逐模块处理，将模块从 pending 移到 completed → Phase 3 收尾后删除文件。
 
 ### 3.4. 检查点 — 用户确认
 

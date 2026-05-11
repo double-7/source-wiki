@@ -42,8 +42,6 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 
 ### 3.3. 创建 wiki.lint.json
 
-Schema 引用 design.local.md §4.7：
-
 ```json
 {
   "scope": "",
@@ -57,7 +55,25 @@ Schema 引用 design.local.md §4.7：
 }
 ```
 
-`scope`：定向模式为模块名，全量模式为空字符串。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| scope | string | `""` = 全量扫描，模块名 = 针对性扫描 |
+| dimensions | object | 四维度执行状态 |
+| dimensions[X] | string | `"pending"` 或 `"completed"`（X ∈ {freshness, coverage, integrity, consistency}） |
+| findings | finding[] | 累积发现 |
+
+**finding 结构**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| dimension | string | 发现该问题的维度 |
+| severity | string | `"high"` / `"medium"` / `"low"` |
+| page | string | 受影响页面相对路径 |
+| description | string | 问题描述 |
+| fixType | string | `"safe"`（可自动修）/ `"content"`（需确认）/ `"none"`（仅报告） |
+| fixPlan | string | 修复方案（如适用） |
+
+**状态流转**：初始化 dimensions（全部 pending）→ 逐维度检查，标记 completed + 追加 findings → 汇总报告后删除文件。
 
 无需检查点（lint 是只读检查，低风险）。
 

@@ -75,8 +75,6 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 ### 3.4. 创建 wiki.ingest.json
 
-Schema 引用 `docs/design.local.md` §4.6：
-
 ```json
 {
   "anchor": "<commit-hash>",
@@ -88,6 +86,23 @@ Schema 引用 `docs/design.local.md` §4.6：
   "completed": []
 }
 ```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| anchor | string | git commit hash，diff 基准点 |
+| changedFiles | string[] | 检测到的源码变更文件列表 |
+| pending | target[] | 待处理目标 |
+| completed | target[] | 已处理目标 |
+
+**target 结构**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | string | feature 或 flow 页面名 |
+| type | string | `"direct"`（source 匹配）或 `"indirect"`（关系推导） |
+| reason | string | 选中此目标的理由 |
+
+**状态流转**：分析变更后写入 targets → 逐 target 处理，从 pending 移到 completed → 汇总后删除文件。
 
 ### 3.5. 检查点 — 用户确认
 

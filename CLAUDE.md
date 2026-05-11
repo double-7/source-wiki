@@ -63,11 +63,12 @@ query 直接在用户会话中执行。
 ## 注意事项
 
 - 修改 wiki-schema.md 时只添加规则/格式/约束（WHAT），执行流程/状态转换（HOW）放对应 SKILL.md
-- 文档三层一致性：`docs/plan.local.md`（方案）→ `skills/*/SKILL.md`（实现）→ `docs/design.local.md`（设计），改动需同步三层
+- 文档角色分层：`docs/design.local.md`（WHY：决策+架构）、`schemas/wiki-schema.md`（WHAT：规则+模型）、`skills/*/SKILL.md`（HOW：执行流程）。改动需同步相关层
 - SKILL.md 是 LLM prompt：不写 turn 计数估算、不展开 wiki-schema.md 已定义的规则（如修复边界）；保留具体的 bash 命令和 JSON 示例
-- 临时文件 schema（wiki.init.json、wiki.ingest.json、wiki.lint.json）在设计文档统一定义，SKILL.md 直接引用
+- 临时文件 schema（wiki.init.json、wiki.ingest.json、wiki.lint.json）在各自 SKILL.md 内联定义，不引用外部文件
 - 多个 SKILL.md 间的小量重复（~5 句）可接受，不抽取为共享 scheme
 - 模板中引用路径用 `${CLAUDE_PLUGIN_ROOT}/templates/`（运行时变量）
 - Wiki 输出路径固定为 `docs/wiki/`（相对于被分析的目标项目）
 - 页面类型由文件所在目录确定，模板中不含 `type` 字段
 - Markdown 标题编号：插件源文件（SKILL.md、schema、design doc、plan doc）统一编号。`#` 无编号为文件定义；`## 1.` 起顺序编号；`### 1.1` 在父章节内编号。编辑时保持编号一致，新增章节追加到末尾
+- 开发流程闭环：plan.local.md（方案）→ 实现 → 设计同步检查。plan 末尾必须包含设计同步检查段：是否涉及决策变更 → 更新 design.local.md；是否涉及规则/约束变更 → 更新 wiki-schema.md；均否 → 标注"无需同步"
