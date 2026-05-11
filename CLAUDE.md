@@ -35,7 +35,7 @@ LLM 生成的 wiki 天然存在准确率上限（隐式约定、复杂控制流�
   - `ingest/SKILL.md` — 变更检测 → 影响分析 → 逐 target 处理
   - `lint/SKILL.md` — 规划维度 → 逐维度检查 → 汇总报告
   - `query/SKILL.md` — 直接执行
-- `templates/` — 5 个页面模板（index、overview、module、feature、flow）
+- `templates/` — 8 个页面模板（index、overview、module、feature、flow、api、conventions、deployment）
 - `hooks/wiki-hook.js` — 统一校验（临时文件 schema + frontmatter 按目录校验）
 - `scripts/query-wiki.js` — frontmatter 结构化查询脚本
 - `libs/js-yaml-4.1.1.min.js` — 内嵌 YAML 解析库（MIT）

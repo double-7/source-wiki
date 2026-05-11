@@ -194,6 +194,9 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 - 模块文档 → `templates/module.md`
 - 功能文档 → `templates/feature.md`
 - 流程文档 → `templates/flow.md`
+- API 文档（架构级）→ `templates/api.md`
+- 开发规范（架构级）→ `templates/conventions.md`
+- 部署文档（架构级）→ `templates/deployment.md`
 
 模板提供推荐的 frontmatter 字段和页面结构，可以根据实际情况灵活调整。
 

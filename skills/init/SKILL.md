@@ -152,19 +152,45 @@ pending 为空，进入阶段三收尾。
 
 ## 阶段三：收尾
 
-### 1. 创建 flow 页面
+### 1. 推断 flow 并确认
 
-根据阶段二收集的跨模块关系线索，创建跨模块业务流程页面（参考 `${CLAUDE_PLUGIN_ROOT}/templates/flow.md`）。
+基于阶段二收集的跨模块关系线索，推断业务流程。
 
-### 2. 创建 overview.md
+**必须调用 AskUserQuestion** 展示推断结果（阻断步骤，未经确认不得创建 flow 页面）：
 
-创建项目总览页面（参考 `${CLAUDE_PLUGIN_ROOT}/templates/overview.md`）：
-- 架构概览和系统分层
-- 模块间关系
-- 关键设计决策
-- 技术栈详情
+> **推断的业务流程**：
+> - user-registration（用户注册）：[[features/register]] → [[features/email-verify]] → [[features/profile-init]]
+> - order-fulfillment（订单履约）：[[features/create-order]] → [[features/payment]] → [[features/shipping]]
+>
+> 此列表是否合理？可以删除、修改描述或补充遗漏的流程。
 
-### 3. 创建 index.md、log.md、.gitignore
+### 2. 创建 flow 页面
+
+用户确认后，读取 `${CLAUDE_PLUGIN_ROOT}/templates/flow.md`，创建 flow 页面。
+
+### 3. 推断 architecture 页面并确认
+
+基于已有全部页面（modules、features、flows）的上下文，推断需要哪些 architecture 级页面。overview.md 始终创建，其他页面根据项目特征判断。
+
+**必须调用 AskUserQuestion** 展示推断结果（阻断步骤，未经确认不得创建 architecture 页面）：
+
+> **Architecture 页面规划**：
+> - overview.md（必选）
+> - api.md — 项目暴露 12 个 REST 端点，建议创建 API 文档
+> - deployment.md — 检测到 Dockerfile 和 docker-compose.yml，建议创建部署文档
+> - conventions.md — 未检测到明显的 lint/style 配置，暂不建议
+>
+> 请确认要创建哪些页面。可以删除或补充。
+
+### 4. 创建 architecture 页面
+
+用户确认后：
+1. 读取对应的 `${CLAUDE_PLUGIN_ROOT}/templates/` 模板
+2. **回读源码**填充细节（如 api.md 需要读取路由定义，deployment.md 需要读取 Dockerfile 等）
+3. 有源码证据的章节正常填充；无源码证据但模板要求的章节直接删除该章节；整个页面无足够信息则提示用户
+4. 创建 architecture 页面（overview.md 必选，其他按确认结果）
+
+### 5. 创建 index.md、log.md、.gitignore
 
 - **index.md**：完整版导航，包含所有已创建的页面双链引用
 - **log.md**：初始条目（格式见 wiki-maintainer.md 日志格式）
@@ -174,13 +200,13 @@ pending 为空，进入阶段三收尾。
   - 已存在且已含该规则 -> 跳过
   - 如 docs/wiki/ 已被 git track 且含 wiki.*.json -> 提示用户手动 `git rm --cached`
 
-### 4. 删除 wiki.init.json
+### 6. 删除 wiki.init.json
 
-### 5. 更新 index.md.updated
+### 7. 更新 index.md.updated
 
 将 index.md 的 `updated` 字段更新为当前秒级 ISO 时间戳。
 
-### 6. 完成摘要
+### 8. 完成摘要
 
 输出：
 - **模块划分**：最终版与初始提案的差异（如有）
