@@ -16,10 +16,6 @@ memory: project
 
 ## 知识模型
 
-### 层级体系
-
-知识库采用自底向上的四级层级：
-
 ```
 architecture  ← 基于 feature/module/flow 归纳产生的系统级文档
     ↑
@@ -30,11 +26,7 @@ module        ← 代码实现视角的归纳分组（不限于业务领域）
 feature       ← 实现明确目的的最小能力单元
 ```
 
-每一层只描述属于自己层级的内容，不越级：
-- **Feature**：一个具体能力如何实现，涉及哪些文件和代码
-- **Module**：一个归纳分组包含哪些 feature，共享什么数据，模块间依赖
-- **Flow**：一个业务目标如何通过多个能力单元的协作来完成
-- **Architecture**：基于底层页面归纳产生的系统级文档
+每层只描述本层级内容，不越级。
 
 ### 目录结构
 
@@ -53,115 +45,44 @@ docs/wiki/
 └── queries/              # 查询沉淀
 ```
 
-**页面类型由文件所在目录确定，不在 frontmatter 中存储。** 查询脚本从文件路径推导类型：`features/login.md` → type = feature。
+**页面类型由文件所在目录确定，不在 frontmatter 中存储。**
 
 ### 页面类型速查
 
-| 类型 | 定义 | 粒度标准 | 关键约束 |
-|------|------|---------|---------|
-| feature | 实现明确目的的最小能力单元 | 建页标准：有明确目的 + 能独立理解 | 太小（无明确目的）→内联到所属页面；太大（多目的）→拆分 |
-| module | 代码实现视角的归纳分组 | 包含相关 feature（多对多组合） | 分组依据不限业务领域——可以是技术关注点、基础设施、横切功能、共享工具 |
-| flow | 描述业务目标的多能力单元协作流程 | 描述一个完整业务目的 + 涉及多个能力单元（feature/module）的协作 | flow 引用涉及的 module 和 feature（均为可选） |
-| architecture | 基于 feature/module/flow 归纳的系统级文档 | 项目整体 | 不重复 feature/module 实现细节；从底层归纳产生，非独立编写 |
+| 类型 | 粒度标准 | 关键约束 |
+|------|---------|---------|
+| feature | 有明确目的 + 能独立理解 | 太小（无明确目的）→内联到所属页面；太大（多目的）→拆分 |
+| module | 包含相关 feature（多对多组合） | 分组依据不限业务领域——可以是技术关注点、基础设施、横切功能、共享工具 |
+| flow | 一个完整业务目的 + 多能力单元（feature/module）的协作 | 引用涉及的 module 和 feature（均为可选） |
+| architecture | 项目整体 | 不重复 feature/module 实现细节；从底层归纳产生 |
 
-## Frontmatter Schema
+## 页面规范
 
-### 通用字段（所有页面类型）
+### 命名与链接
 
-```yaml
----
-title: "页面标题"
-created: 2026-04-21T14:30:00Z
-updated: 2026-04-21T14:30:00Z
-tags: [tag1, tag2]
-guidelines: []
-issues: []
----
-```
+- **命名**：小写英文 + 连字符：`user-login.md`
+- **链接**：双链格式 `[[类型目录/页面名]]`（如 `[[features/login]]`），自然融入正文。每个页面至少有一个入站链接。
+
+### 模板参考
+
+创建页面时读取 `${CLAUDE_PLUGIN_ROOT}/templates/<类型>.md`：
+`index.md`、`overview.md`、`module.md`、`feature.md`、`flow.md`、`api.md`、`conventions.md`、`deployment.md`
+
+### 通用字段
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | title | string | 人类可读标题，与文件名语义一致 |
 | created | string | ISO 8601 秒级时间戳（`2026-04-21T14:30:00Z`） |
 | updated | string | ISO 8601 秒级时间戳，每次修改时更新 |
-| tags | string[] | 自由标签，分类和检索。module 可用关注点类型标签（如 `infrastructure`、`cross-cutting`、`utility`）辅助分类 |
+| tags | string[] | 自由标签。module 可用关注点标签（`infrastructure`、`cross-cutting`、`utility`） |
 | guidelines | string[] | 设计决策约束，记录为什么这样做 |
 | issues | string[] | 待处理问题，格式：`问题描述 — 来源 日期` |
 
 ### 关系字段
 
-关系字段分为两类：
-
-- **`depends`**（平级引用）：引用同类型的其他页面，表示依赖关系。所有页面类型均可选。
-- **类型命名字段**（下级引用）：引用层级更低的其他类型页面。字段名即目标类型目录名，值必须是 `[[<类型目录>/<页面名>]]` 格式的双链。
-
-**双链格式**：`[[<类型目录>/<页面名>]]`，类型目录为 `features`、`modules`、`flows`、`architectures`、`queries` 之一。目录前缀消除不同类型下的同名歧义，且链接自带类型信息。
-
-### 各类型专属字段
-
-**Feature**（`features/` 目录）：
-
-```yaml
-source: ["src/auth/LoginService.kt", "src/auth/LoginController.kt"]
-depends: ["[[features/token-refresh]]"]
-```
-
-- `source`：映射的源码文件路径（**必需，非空字符串数组**）
-- `depends`：依赖的其他 feature 页面（可选）
-
-**Module**（`modules/` 目录）：
-
-```yaml
-features: ["[[features/login]]", "[[features/register]]"]
-depends: ["[[modules/user]]"]
-```
-
-- `features`：组合的 feature 页面（**必需，非空双链数组，多对多**）
-- `depends`：依赖的其他 module 页面（可选）
-
-**Flow**（`flows/` 目录）：
-
-```yaml
-modules: ["[[modules/auth]]", "[[modules/user]]"]
-features: ["[[features/login]]", "[[features/token-refresh]]"]
-depends: []
-```
-
-- `modules`：涉及的 module 页面（**可选，双链数组**）
-- `features`：涉及的 feature 页面（可选）
-- `depends`：依赖的其他 flow 页面（可选）
-
-**Architecture**（`architectures/` 目录）：
-
-```yaml
-modules: ["[[modules/auth]]", "[[modules/user]]"]
-flows: ["[[flows/login-flow]]"]
-features: []
-depends: []
-```
-
-- `modules`、`flows`、`features`：所有关系字段可选
-- `depends`：依赖的其他 architecture 页面（可选）
-
-**Query**（`queries/` 目录）：
-
-```yaml
-depends: ["[[queries/auth-analysis]]"]
-```
-
-- `depends`：依赖的其他 query 页面（可选）
-
-**Index**（`docs/wiki/index.md`）：
-
-```yaml
-title: "项目 Wiki"
-created: 2026-04-21T14:30:00Z
-updated: 2026-04-21T14:30:00Z
-```
-
-- 仅 `title`、`created`、`updated` 必需；`tags` 可选
-
-### 关系方向
+- **`depends`**（平级引用）：同类型页面依赖，所有类型可选
+- **类型命名字段**（下级引用）：字段名即目标目录名（`features`、`modules`、`flows`），值为 `[[<目录>/<页面名>]]` 双链数组
 
 信息单向存储在下级引用字段中（组合→被组合），反向查询通过脚本实现：
 
@@ -173,32 +94,50 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type module -
 node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --field modules --contains "[[modules/auth]]"
 ```
 
-## 页面格式
+### 各类型专属字段
 
-### 命名
+**Feature**（`features/`）：
 
-- 使用小写英文，单词间用连字符分隔：`user-login.md`
-- 文件名应简洁、可辨识、与内容直接相关
+```yaml
+source: ["src/auth/LoginService.kt", "src/auth/LoginController.kt"]
+depends: ["[[features/token-refresh]]"]
+```
 
-### 链接
+`source` 必需（非空字符串数组）；`depends` 可选。
 
-- 双链格式：`[[类型目录/页面名]]`（如 `[[features/login]]`、`[[modules/auth]]`）
-- 链接文字应自然融入正文，不要堆砌链接
-- 每个页面至少应有一个入站链接（从 index.md 或其他页面指向它），避免孤立页面
+**Module**（`modules/`）：
 
-### 模板参考
+```yaml
+features: ["[[features/login]]", "[[features/register]]"]
+depends: ["[[modules/user]]"]
+```
 
-创建新页面时，读取 `${CLAUDE_PLUGIN_ROOT}/templates/` 目录下的对应模板：
-- 导航页 → `templates/index.md`
-- 项目总览（架构级）→ `templates/overview.md`
-- 模块文档 → `templates/module.md`
-- 功能文档 → `templates/feature.md`
-- 流程文档 → `templates/flow.md`
-- API 文档（架构级）→ `templates/api.md`
-- 开发规范（架构级）→ `templates/conventions.md`
-- 部署文档（架构级）→ `templates/deployment.md`
+`features` 必需（非空双链数组，多对多）；`depends` 可选。
 
-模板提供推荐的 frontmatter 字段和页面结构，可以根据实际情况灵活调整。
+**Flow**（`flows/`）：
+
+```yaml
+modules: ["[[modules/auth]]"]
+features: ["[[features/login]]"]
+depends: []
+```
+
+`modules`、`features`、`depends` 均可选。
+
+**Architecture**（`architectures/`）：
+
+```yaml
+modules: ["[[modules/auth]]"]
+flows: ["[[flows/login-flow]]"]
+features: []
+depends: []
+```
+
+所有关系字段可选。
+
+**Query**（`queries/`）：仅 `depends`（可选）。
+
+**Index**（`docs/wiki/index.md`）：仅 `title`、`created`、`updated` 必需。
 
 ## 共享规则
 
@@ -216,7 +155,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 ### 依赖驱动拆分
 
-当 feature-A 内的某个能力被 feature-B 依赖时，该能力应拆分为独立 feature-C。A 和 B 都通过 depends 引用 C。此原则在 init 建立初始边界后，由 ingest/lint 在 wiki 生命周期中持续检测。
+当 feature-A 内的某个能力被 feature-B 依赖时，该能力应拆分为独立 feature-C。A 和 B 都通过 depends 引用 C。
 
 ### 修改协议
 
@@ -230,8 +169,6 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 **例外**：仅写 issues 到 frontmatter（不做内容修改）时，只执行步骤 1-3，不更新 `updated`。
 
 ### 修复边界
-
-显式定义三层修复权限，所有命令共享：
 
 ```
 自动修（无需确认）
@@ -253,7 +190,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 ### 日志格式
 
-`docs/wiki/log.md` 是 append-only 变更日志，新条目追加在文件末尾。由命令完成后写入。
+`docs/wiki/log.md` 是 append-only 变更日志，无 frontmatter，不受 Hook 校验。
 
 ```markdown
 ## [2026-04-21] init | 用户认证模块
@@ -265,17 +202,9 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 格式：`## [日期] 操作 | 标题` + 操作要点 + 关键发现。
 
-log.md 无 frontmatter，不受 Hook 校验。
-
 ### index.md 系统角色
 
-index.md 承担两个角色：
-1. **人类导航**：结构化页面目录，双链引用
-2. **人类可读时间戳**：`updated` 字段由命令在收尾时维护
-
-**`updated` 字段由命令完成后更新**（与 log.md 写入同步），不由 Hook 自动维护。
-
-**index.md 是系统关键文件，不可删除。**
+导航页（系统关键文件，不可删除）。`updated` 字段由命令在收尾时与 log.md 同步更新。
 
 ## 临时文件规范
 
@@ -296,13 +225,6 @@ Glob docs/wiki/wiki.*.json
 ```
 命令启动 → 检查互斥 → 创建 wiki.<cmd>.json → 编排执行 → 删除文件 → 更新 index.md/log.md
 ```
-
-| 阶段 | 行为 |
-|------|------|
-| 启动 | 检查是否存在其他 wiki.*.json，有则拒绝 |
-| 运行 | 命令读写临时文件，推进状态 |
-| 完成 | 删除 wiki.<cmd>.json，命令更新 index.md.updated + 追加 log.md |
-| 中断 | 临时文件保留在磁盘，下次启动可恢复 |
 
 **状态即存在性**：文件不存在 = 未运行，文件存在 = 运行中/中断。
 
