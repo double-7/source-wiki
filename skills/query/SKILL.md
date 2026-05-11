@@ -10,19 +10,19 @@ disable-model-invocation: true
 
 问题: $ARGUMENTS
 
-## 前置步骤
+## 1. 前置步骤
 
-读取 `${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md` 加载共享规则。
+读取 `${CLAUDE_PLUGIN_ROOT}/schemas/wiki-schema.md` 加载共享规则。
 
-## 互斥检查
+## 2. 互斥检查
 
 Glob `docs/wiki/wiki.*.json`：
 - 有其他命令的临时文件 → 警告"wiki 可能处于不完整状态，结果可能不准确"，继续执行
 - 无临时文件 → 正常执行
 
-## 查询流程
+## 3. 查询流程
 
-### 1. 结构化定位
+### 3.1. 结构化定位
 
 使用 query-wiki.js 按条件查询相关页面：
 
@@ -39,19 +39,19 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source 
 
 关系类查询（依赖、引用关系）可直接从 query-wiki.js 返回的 frontmatter 结构化数据回答。
 
-### 2. 知识检索
+### 3.2. 知识检索
 
 读定位到的 wiki 页面完整内容。
 
-### 3. 回源精确定位
+### 3.3. 回源精确定位
 
 如果 wiki 信息不足，利用 feature 页面的 `source` 字段精确跳转到源码文件。只读必要的内容。
 
-### 4. 综合回答
+### 3.4. 综合回答
 
 基于 wiki 知识（和源码补充）给出结构化回答。
 
-### 5. 矛盾检测
+### 3.5. 矛盾检测
 
 如果回源时发现 wiki 描述与源码不一致，按修复边界处理：
 
@@ -66,11 +66,11 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source 
 2. 写 issues 到相关页面 frontmatter
 3. 告知用户"已记录。运行 `/sw:lint` 将统一处理。"
 
-## 沉淀控制
+## 4. 沉淀控制
 
 沉淀（创建或更新 wiki 页面）**必须由用户明确触发**。agent 不自主沉淀。
 
-### 何时建议沉淀
+### 4.1. 何时建议沉淀
 
 当回答满足以下条件之一时，AskUserQuestion 询问是否沉淀：
 
@@ -85,7 +85,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source 
 - "确认沉淀"
 - "仅作参考"
 
-### 沉淀路径
+### 4.2. 沉淀路径
 
 根据洞察性质推荐目标：
 
@@ -96,7 +96,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source 
 | 新功能/流程发现 | features/ 或 flows/ |
 | 一次性查询答案 | queries/ |
 
-### 用户确认沉淀后
+### 4.3. 用户确认沉淀后
 
 **新增页面**——创建页面（含完整 frontmatter），更新 index.md。
 
@@ -106,7 +106,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source 
 - 更新 index.md 的 `updated` 为当前秒级 ISO 时间戳
 - 追加 log.md
 
-### 不建议沉淀
+### 4.4. 不建议沉淀
 
 - 一次性简单事实查询（如"某个函数在哪个文件"）
 - 答案可以直接从单个 wiki 页面获取且无需修正

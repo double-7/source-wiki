@@ -7,11 +7,11 @@ disable-model-invocation: true
 
 单会话自包含流程——增量同步源码变更到 wiki。
 
-## 前置步骤
+## 1. 前置步骤
 
-读取 `${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md` 加载共享规则。
+读取 `${CLAUDE_PLUGIN_ROOT}/schemas/wiki-schema.md` 加载共享规则。
 
-## 状态判断
+## 2. 状态判断
 
 Glob `docs/wiki/wiki.*.json`：
 
@@ -19,13 +19,13 @@ Glob `docs/wiki/wiki.*.json`：
 |------|------|
 | 有 wiki.ingest.json | 中断恢复（AskUserQuestion 三选项：恢复/保留重建/完全重来） |
 | 有其他 wiki.*.json | 拒绝："另一个操作正在进行中。请先完成。" |
-| 无临时文件 | 确认 docs/wiki/ 存在且有页面 → 继续 Detect；不存在 → 报错"请先运行 `/sw:init`" |
+| 无临时文件 | 确认 docs/wiki/ 存在且有页面 → 继续变更检测；不存在 → 报错"请先运行 `/sw:init`" |
 
-恢复时读取 wiki.ingest.json 的 pending/completed 状态，跳到处理阶段继续执行。
+恢复时读取 wiki.ingest.json 的 pending/completed 状态，跳到处理步骤继续执行。
 
-## Detect 阶段
+## 3. 变更检测
 
-### 1. 锚点检测
+### 3.1. 锚点检测
 
 按以下顺序获取 git diff 基准点：
 
@@ -39,7 +39,7 @@ git log -1 --format=%H -- docs/wiki/log.md
   - 无返回（空仓库）→ 报告"wiki 刚初始化，尚无源码变更可同步"，正常退出
 - 非 git 仓库 → 报错"ingest 要求项目使用 git"
 
-### 2. 检测源码变化
+### 3.2. 检测源码变化
 
 ```bash
 git diff <hash> -- <source-dir> -- ':!docs/wiki/'
@@ -47,7 +47,7 @@ git diff <hash> -- <source-dir> -- ':!docs/wiki/'
 
 提取变更文件列表（相对项目根目录的路径）。无变更 → 提示"wiki 已是最新"，终止。
 
-### 3. 影响分析
+### 3.3. 影响分析
 
 使用 `query-wiki.js` 进行结构化查询，分两级推导影响范围。
 
@@ -73,7 +73,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 **新增文件处理**：变更文件无对应 feature 时，判断是否属于新 feature → 加入 direct targets；否则归入最近的已有 feature 的变更范围。
 
-### 4. 创建 wiki.ingest.json
+### 3.4. 创建 wiki.ingest.json
 
 Schema 引用 `docs/design.local.md` §4.6：
 
@@ -89,7 +89,7 @@ Schema 引用 `docs/design.local.md` §4.6：
 }
 ```
 
-### 5. 检查点 -- 用户确认
+### 3.5. 检查点 — 用户确认
 
 AskUserQuestion 展示影响分析：
 
@@ -107,13 +107,13 @@ AskUserQuestion 展示影响分析：
 是否继续处理？
 ```
 
-用户确认后进入处理阶段。
+用户确认后进入处理步骤。
 
-## 处理阶段
+## 4. 逐 target 处理
 
 对 wiki.ingest.json 中每个 pending target 顺序处理。
 
-### type == "direct"
+### 4.1. type == "direct"
 
 源码文件变更命中 feature 的 source 字段。
 
@@ -128,22 +128,22 @@ AskUserQuestion 展示影响分析：
    - 新增文件无法归属现有 feature → 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 创建新 feature 页面
    - 删除文件导致 feature 的 source 全部不存在 → 删除该 feature 页面，更新所属 module 的 features 字段
 
-### type == "indirect"
+### 4.2. type == "indirect"
 
 跨模块关联影响（module/flow/architecture 等）。
 
 1. 读取目标页面，获取 frontmatter 的 `guidelines` 和 `issues`
 2. 读取 reason 中提到的变更模块相关源码（如 indirect 是因 module 下的 feature 变更）
-3. 按修复边界决策处理（wiki-maintainer.md 修复边界规则）
+3. 按修复边界决策处理（wiki-schema.md 修复边界规则）
 4. 修改页面时同步更新 frontmatter `updated`
 
-### 更新 wiki.ingest.json
+### 4.3. 更新 wiki.ingest.json
 
 每处理完一个 target：从 `pending` 移除该 target，追加到 `completed`。Edit wiki.ingest.json 保存进度，确保中断后可从断点恢复。
 
-## Summary 阶段
+## 5. 汇总报告
 
-### 1. 重建报告
+### 5.1. 重建报告
 
 按 type 分组输出：
 
@@ -161,11 +161,11 @@ AskUserQuestion 展示影响分析：
 
 跳过的 target 单独标注说明。
 
-### 2. 清理
+### 5.2. 清理
 
 删除 `docs/wiki/wiki.ingest.json`。
 
-### 3. 更新 index.md + 追加 log.md
+### 5.3. 更新 index.md + 追加 log.md
 
 - Edit `docs/wiki/index.md`，将 `updated` 更新为当前秒级 ISO 时间戳
 - 追加变更日志到 `docs/wiki/log.md`，格式：
@@ -178,7 +178,7 @@ AskUserQuestion 展示影响分析：
 - 关键发现：LoginService 新增双 token 刷新机制
 ```
 
-### 4. 建议后续
+### 5.4. 建议后续
 
 - 人工审查更新的页面
 - 运行 `/sw:lint` 进行健康检查

@@ -10,11 +10,11 @@ disable-model-invocation: true
 
 源码路径: $ARGUMENTS
 
-## 前置步骤
+## 1. 前置步骤
 
-读取 `${CLAUDE_PLUGIN_ROOT}/agents/wiki-maintainer.md` 加载共享规则（知识模型、frontmatter schema、页面格式、修改协议、修复边界）。
+读取 `${CLAUDE_PLUGIN_ROOT}/schemas/wiki-schema.md` 加载共享规则（知识模型、frontmatter schema、页面格式、修改协议、修复边界）。
 
-## 状态判断
+## 2. 状态判断
 
 Glob `docs/wiki/wiki.*.json`：
 
@@ -23,11 +23,11 @@ Glob `docs/wiki/wiki.*.json`：
 | 有 wiki.init.json | 中断恢复（AskUserQuestion 三选项：恢复/保留重建/完全重来） |
 | 有其他 wiki.*.json | 拒绝："另一个操作正在进行中。请先完成。" |
 | 有 wiki 页面但无临时文件 | AskUserQuestion：重新全量分析（覆盖）还是用 `/sw:ingest` 增量？ |
-| 空目录 | 进入阶段一 |
+| 空目录 | 进入步骤 3 |
 
-## 阶段一：扫描规划
+## 3. 扫描规划
 
-### 1. 扫描源码元数据
+### 3.1. 扫描源码元数据
 
 按以下顺序操作（只读签名和结构，不读实现）：
 
@@ -37,7 +37,7 @@ Glob `docs/wiki/wiki.*.json`：
 4. **导出签名**：Grep `export` 语句（签名行，不读文件内容）
 5. **测试文件名**：Glob `*.test.*` / `*.spec.*` / `*_test.*`
 
-### 2. 综合分析
+### 3.2. 综合分析
 
 基于扫描结果：
 
@@ -48,7 +48,7 @@ Glob `docs/wiki/wiki.*.json`：
 - 标注低置信度区域
 - 统计源码文件总量，确定委派策略（≤ 50 主会话内联，> 50 可委派 Agent tool，最多 5 agent）
 
-### 3. 创建 wiki.init.json
+### 3.3. 创建 wiki.init.json
 
 Schema 见 `docs/design.local.md` §4.5：
 
@@ -65,7 +65,7 @@ Schema 见 `docs/design.local.md` §4.5：
 }
 ```
 
-### 4. 检查点 -- 用户确认
+### 3.4. 检查点 — 用户确认
 
 AskUserQuestion 展示模块划分方案：
 
@@ -77,17 +77,17 @@ AskUserQuestion 展示模块划分方案：
 >
 > 此划分是否合理？可以调整模块的合并、拆分或重命名。
 
-用户确认后：如需调整则更新 wiki.init.json，进入阶段二。
+用户确认后：如需调整则更新 wiki.init.json，进入步骤 4。
 
-## 阶段二：逐模块处理
+## 4. 逐模块处理
 
-读取 wiki.init.json 获取 pending 列表，按阶段一确定的委派策略执行。
+读取 wiki.init.json 获取 pending 列表，按步骤 3 确定的委派策略执行。
 
 **委派策略**（文件总量 > 50 时启用）：
 - 按模块关联度分组，最多 5 agent，顺序派发
 - 每个 agent 完成后主会话更新 wiki.init.json，再派发下一个
 
-### 1. 分析源码
+### 4.1. 分析源码
 
 按以下策略读取源码，目标：**~70% 准确率的知识骨架**——结构正确比细节完美更重要。
 
@@ -104,7 +104,7 @@ AskUserQuestion 展示模块划分方案：
 
 **原则**：只写人类不容易从代码直接看到的内容（协作关系、设计意图、隐式约定）。不确定边界时宁可稍大。
 
-### 2. 确定 features
+### 4.2. 确定 features
 
 按建页标准划分 feature：
 
@@ -112,7 +112,7 @@ AskUserQuestion 展示模块划分方案：
 - 不满足 -> 内联到所属模块页面
 - 太大（多目标） -> 拆分
 
-### 3. 提取 guidelines
+### 4.3. 提取 guidelines
 
 从源码中识别明确的设计决策，写入页面 guidelines：
 - 架构选择（如"事件驱动"/"请求-响应"）
@@ -122,7 +122,7 @@ AskUserQuestion 展示模块划分方案：
 
 每条 guideline 一句话，记录"为什么这样做"。仅提取代码中明确体现的决策，不推断设计意图。
 
-### 4. 创建页面
+### 4.4. 创建页面
 
 - 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 和 `${CLAUDE_PLUGIN_ROOT}/templates/module.md`
 - 创建 feature 页面（含完整 frontmatter：title、created、updated、source、tags、guidelines）
@@ -132,11 +132,11 @@ AskUserQuestion 展示模块划分方案：
 feature 页面的 `source` 字段填充映射的源码文件路径。
 module 页面的 `features` 字段填充 `[[features/页面名]]` 双链数组。
 
-### 5. 自检
+### 4.5. 自检
 
 回读刚创建的页面，确认 frontmatter 与源码签名一致。只检查本模块内部。
 
-### 6. 更新 wiki.init.json
+### 4.6. 更新 wiki.init.json
 
 从 pending 中移除该模块，追加到 completed。保存 wiki.init.json。
 
@@ -144,17 +144,17 @@ module 页面的 `features` 字段填充 `[[features/页面名]]` 双链数组�
 - 跨模块关系线索（如"auth 模块导出 AuthService，被 order 模块引用"）
 - 低置信度区域
 
-主会话收集后用于阶段三。主会话内联模式下此信息在上下文中隐式保留。
+主会话收集后用于步骤 5。主会话内联模式下此信息在上下文中隐式保留。
 
-### 全部模块完成
+### 4.7. 全部模块完成 → 进入收尾
 
-pending 为空，进入阶段三收尾。
+pending 为空，进入步骤 5。
 
-## 阶段三：收尾
+## 5. 收尾
 
-### 1. 推断 flow 并确认
+### 5.1. 推断 flow 并确认
 
-基于阶段二收集的跨模块关系线索，推断业务流程。
+基于步骤 4 收集的跨模块关系线索，推断业务流程。
 
 **必须调用 AskUserQuestion** 展示推断结果（阻断步骤，未经确认不得创建 flow 页面）：
 
@@ -164,11 +164,11 @@ pending 为空，进入阶段三收尾。
 >
 > 此列表是否合理？可以删除、修改描述或补充遗漏的流程。
 
-### 2. 创建 flow 页面
+### 5.2. 创建 flow 页面
 
 用户确认后，读取 `${CLAUDE_PLUGIN_ROOT}/templates/flow.md`，创建 flow 页面。
 
-### 3. 推断 architecture 页面并确认
+### 5.3. 推断 architecture 页面并确认
 
 基于已有全部页面（modules、features、flows）的上下文，推断需要哪些 architecture 级页面。overview.md 始终创建，其他页面根据项目特征判断。
 
@@ -182,7 +182,7 @@ pending 为空，进入阶段三收尾。
 >
 > 请确认要创建哪些页面。可以删除或补充。
 
-### 4. 创建 architecture 页面
+### 5.4. 创建 architecture 页面
 
 用户确认后：
 1. 读取对应的 `${CLAUDE_PLUGIN_ROOT}/templates/` 模板
@@ -190,23 +190,23 @@ pending 为空，进入阶段三收尾。
 3. 有源码证据的章节正常填充；无源码证据但模板要求的章节直接删除该章节；整个页面无足够信息则提示用户
 4. 创建 architecture 页面（overview.md 必选，其他按确认结果）
 
-### 5. 创建 index.md、log.md、.gitignore
+### 5.5. 创建 index.md、log.md、.gitignore
 
 - **index.md**：完整版导航，包含所有已创建的页面双链引用
-- **log.md**：初始条目（格式见 wiki-maintainer.md 日志格式）
+- **log.md**：初始条目（格式见 wiki-schema.md 日志格式）
 - **.gitignore**：确保排除 wiki.*.json：
   - 不存在 -> 创建，内容为 `wiki.*.json`
   - 已存在且不含该规则 -> 追加
   - 已存在且已含该规则 -> 跳过
   - 如 docs/wiki/ 已被 git track 且含 wiki.*.json -> 提示用户手动 `git rm --cached`
 
-### 6. 删除 wiki.init.json
+### 5.6. 删除 wiki.init.json
 
-### 7. 更新 index.md.updated
+### 5.7. 更新 index.md.updated
 
 将 index.md 的 `updated` 字段更新为当前秒级 ISO 时间戳。
 
-### 8. 完成摘要
+### 5.8. 完成摘要
 
 输出：
 - **模块划分**：最终版与初始提案的差异（如有）

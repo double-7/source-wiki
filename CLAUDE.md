@@ -25,11 +25,11 @@ LLM 生成的 wiki 天然存在准确率上限（隐式约定、复杂控制流�
 
 - **产品层**：init/ingest/lint/query 四维度定义 wiki 生命周期
 - **架构层**：数据模型 + 临时状态管理 + 安全机制
-- **实现层**：agent 定义 WHAT（规则、模型、约束），skills 定义 HOW（执行流程）
+- **实现层**：schema 定义 WHAT（规则、模型、约束），skills 定义 HOW（执行流程）
 
 ### 文件结构
 
-- `agents/wiki-maintainer.md` — 纯 WHAT：知识模型、frontmatter schema、页面格式、临时文件规范、共享不变量
+- `schemas/wiki-schema.md` — 纯 WHAT：知识模型、frontmatter schema、页面格式、临时文件规范、共享不变量
 - `skills/` — 纯 HOW：4 个 SKILL.md
   - `init/SKILL.md` — 扫描规划 → 逐模块处理（可委派 Agent tool）→ 收尾
   - `ingest/SKILL.md` — 变更检测 → 影响分析 → 逐 target 处理
@@ -62,11 +62,12 @@ query 直接在用户会话中执行。
 
 ## 注意事项
 
-- 修改 wiki-maintainer.md 时只添加规则/格式/约束（WHAT），执行流程/状态转换（HOW）放对应 SKILL.md
+- 修改 wiki-schema.md 时只添加规则/格式/约束（WHAT），执行流程/状态转换（HOW）放对应 SKILL.md
 - 文档三层一致性：`docs/plan.local.md`（方案）→ `skills/*/SKILL.md`（实现）→ `docs/design.local.md`（设计），改动需同步三层
-- SKILL.md 是 LLM prompt：不写 turn 计数估算、不展开 wiki-maintainer.md 已定义的规则（如修复边界）；保留具体的 bash 命令和 JSON 示例
+- SKILL.md 是 LLM prompt：不写 turn 计数估算、不展开 wiki-schema.md 已定义的规则（如修复边界）；保留具体的 bash 命令和 JSON 示例
 - 临时文件 schema（wiki.init.json、wiki.ingest.json、wiki.lint.json）在设计文档统一定义，SKILL.md 直接引用
 - 多个 SKILL.md 间的小量重复（~5 句）可接受，不抽取为共享 scheme
 - 模板中引用路径用 `${CLAUDE_PLUGIN_ROOT}/templates/`（运行时变量）
 - Wiki 输出路径固定为 `docs/wiki/`（相对于被分析的目标项目）
 - 页面类型由文件所在目录确定，模板中不含 `type` 字段
+- Markdown 标题编号：插件源文件（SKILL.md、schema、design doc、plan doc）统一编号。`#` 无编号为文件定义；`## 1.` 起顺序编号；`### 1.1` 在父章节内编号。编辑时保持编号一致，新增章节追加到末尾

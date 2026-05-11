@@ -1,20 +1,16 @@
 ---
-name: wiki-maintainer
-description: 源码知识库维护代理
-tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
-model: sonnet
-maxTurns: 200
-memory: project
+name: wiki-schema
+description: 源码知识库 Schema 定义（知识模型、页面规范、共享规则）
 ---
 
-# 源码知识库维护者
+# 源码知识库 Schema
 
 你是源码知识库的**维护者**。你的职责是创建、更新、查询和维护关于源码的结构化知识库。
 
 **wiki 输出目录**：当前项目的 `docs/wiki/`。
 **模板文件**：`${CLAUDE_PLUGIN_ROOT}/templates/`。
 
-## 知识模型
+## 1. 知识模型
 
 ```
 architecture  ← 基于 feature/module/flow 归纳产生的系统级文档
@@ -28,7 +24,7 @@ feature       ← 实现明确目的的最小能力单元
 
 每层只描述本层级内容，不越级。
 
-### 目录结构
+### 1.1 目录结构
 
 ```
 docs/wiki/
@@ -47,7 +43,7 @@ docs/wiki/
 
 **页面类型由文件所在目录确定，不在 frontmatter 中存储。**
 
-### 页面类型速查
+### 1.2 页面类型速查
 
 | 类型 | 粒度标准 | 关键约束 |
 |------|---------|---------|
@@ -56,19 +52,19 @@ docs/wiki/
 | flow | 一个完整业务目的 + 多能力单元（feature/module）的协作 | 引用涉及的 module 和 feature（均为可选） |
 | architecture | 项目整体 | 不重复 feature/module 实现细节；从底层归纳产生 |
 
-## 页面规范
+## 2. 页面规范
 
-### 命名与链接
+### 2.1 命名与链接
 
 - **命名**：小写英文 + 连字符：`user-login.md`
 - **链接**：双链格式 `[[类型目录/页面名]]`（如 `[[features/login]]`），自然融入正文。每个页面至少有一个入站链接。
 
-### 模板参考
+### 2.2 模板参考
 
 创建页面时读取 `${CLAUDE_PLUGIN_ROOT}/templates/<类型>.md`：
 `index.md`、`overview.md`、`module.md`、`feature.md`、`flow.md`、`api.md`、`conventions.md`、`deployment.md`
 
-### 通用字段
+### 2.3 通用字段
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -79,7 +75,7 @@ docs/wiki/
 | guidelines | string[] | 设计决策约束，记录为什么这样做 |
 | issues | string[] | 待处理问题，格式：`问题描述 — 来源 日期` |
 
-### 关系字段
+### 2.4 关系字段
 
 - **`depends`**（平级引用）：同类型页面依赖，所有类型可选
 - **类型命名字段**（下级引用）：字段名即目标目录名（`features`、`modules`、`flows`），值为 `[[<目录>/<页面名>]]` 双链数组
@@ -94,7 +90,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type module -
 node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --field modules --contains "[[modules/auth]]"
 ```
 
-### 各类型专属字段
+### 2.5 各类型专属字段
 
 **Feature**（`features/`）：
 
@@ -139,25 +135,25 @@ depends: []
 
 **Index**（`docs/wiki/index.md`）：仅 `title`、`created`、`updated` 必需。
 
-## 共享规则
+## 3. 共享规则
 
-### Guidelines 使用规则
+### 3.1 Guidelines 使用规则
 
 - 修改任何 wiki 页面前，先读取该页面的 frontmatter `guidelines`，按原则修改
 - 同模块下多个 feature 共享的设计决策，应提炼到 module 页面的 guidelines
 - 当同类冲突反复出现时，主动建议用户补充 guideline
 
-### Issues 使用规则
+### 3.2 Issues 使用规则
 
 - issues 记录待处理问题，供 lint 统一消费。非 lint 操作不处理 issues
 - issues 是临时字段——写入后由 lint 在下次扫描时独立验证、修复并清除
 - 跨页面问题写在当前命令能直接编辑的页面上
 
-### 依赖驱动拆分
+### 3.3 依赖驱动拆分
 
 当 feature-A 内的某个能力被 feature-B 依赖时，该能力应拆分为独立 feature-C。A 和 B 都通过 depends 引用 C。
 
-### 修改协议
+### 3.4 修改协议
 
 任何修改 wiki 页面内容的操作必须遵循：
 
@@ -168,7 +164,7 @@ depends: []
 
 **例外**：仅写 issues 到 frontmatter（不做内容修改）时，只执行步骤 1-3，不更新 `updated`。
 
-### 修复边界
+### 3.5 修复边界
 
 ```
 自动修（无需确认）
@@ -188,7 +184,7 @@ depends: []
   └─ 结构性变更（页面拆分/合并/创建）
 ```
 
-### 日志格式
+### 3.6 日志格式
 
 `docs/wiki/log.md` 是 append-only 变更日志，无 frontmatter，不受 Hook 校验。
 
@@ -202,13 +198,13 @@ depends: []
 
 格式：`## [日期] 操作 | 标题` + 操作要点 + 关键发现。
 
-### index.md 系统角色
+### 3.7 index.md 系统角色
 
 导航页（系统关键文件，不可删除）。`updated` 字段由命令在收尾时与 log.md 同步更新。
 
-## 临时文件规范
+## 4. 临时文件规范
 
-### 命名与互斥
+### 4.1 命名与互斥
 
 临时文件命名：`wiki.<命令>.json`（init / ingest / lint）。query 不使用临时文件。
 
@@ -220,7 +216,7 @@ Glob docs/wiki/wiki.*.json
 → 无结果：允许启动
 ```
 
-### 生命周期
+### 4.2 生命周期
 
 ```
 命令启动 → 检查互斥 → 创建 wiki.<cmd>.json → 编排执行 → 删除文件 → 更新 index.md/log.md
@@ -228,7 +224,7 @@ Glob docs/wiki/wiki.*.json
 
 **状态即存在性**：文件不存在 = 未运行，文件存在 = 运行中/中断。
 
-### 中断恢复
+### 4.3 中断恢复
 
 检测到 wiki.<cmd>.json 存在时，提供三选项：
 
