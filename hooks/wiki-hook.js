@@ -239,17 +239,17 @@ async function main() {
   let hook;
   try { hook = JSON.parse(input); } catch { process.exit(0); }
 
-  const filePath = (hook.file_path || hook.path || '').replace(/\\/g, '/');
+  const filePath = (hook.tool_input?.file_path || hook.file_path || hook.path || '').replace(/\\/g, '/');
   const r = route(filePath);
   if (!r) process.exit(0);
 
-  // 获取写入内容
-  let content = hook.content || hook.new_string || '';
-  if (!content && hook.tool_name) {
-    try { content = fs.readFileSync(hook.file_path || hook.path, 'utf-8'); }
+  // PreToolUse Write: tool_input.content 包含即将写入的完整内容
+  // PostToolUse Edit: tool_input.content 为空，从磁盘读取已编辑的完整文件
+  let content = hook.tool_input?.content || hook.content || '';
+  if (!content.trim()) {
+    try { content = fs.readFileSync(filePath, 'utf-8'); }
     catch { process.exit(0); }
   }
-  if (!content.trim()) process.exit(0);
 
   if (r.kind === 'temp') {
     // ── 临时文件校验 ──

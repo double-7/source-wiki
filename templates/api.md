@@ -13,16 +13,12 @@ features: []
 
 # {{API 名称}}
 
-> 本页面属于架构级文档。API 文档只记录端点的**契约**（参数、返回值、错误码），不记录内部实现。实现细节在对应的 [[feature]] 或 [[module]] 页面中。
-> 如果某个章节不适用于当前项目（如无认证要求），直接删除该章节，而非留空表格。
+> 本页面属于架构级文档。API 文档只记录端点的**契约**（参数、返回值、错误码），不记录内部实现。实现细节在对应的 feature 或 module 页面中。
+> 核心章节必须包含。扩展章节仅在源码有明确证据时添加，无证据不要创建。
 
 ## 概述
 
 > 用 1-2 句话描述这组 API 的用途。
-
-## 认证方式
-
-> 描述这组 API 的认证方式（Bearer Token、API Key、Session 等）。
 
 ## 端点列表
 
@@ -70,18 +66,24 @@ features: []
 
 > 同上格式，逐一展开每个端点。
 
+## 关联的实现
+
+| 端点 | 实现方 |
+|------|--------|
+| POST /api/resource/login | [[features/user-login]] |
+| POST /api/resource/register | [[features/user-register]] |
+
+> 链接到实现该端点的 feature 或 module 页面。本页面不重复描述实现逻辑。
+
+## 认证方式
+
+> 【扩展章节】API 需要认证时添加（Bearer Token、API Key、Session 等），无认证要求时不要创建此章节。
+
 ## 调用示例
+
+> 【扩展章节】API 有典型调用场景时添加。示例可能过时，仅在必要时添加。
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
   https://api.example.com/api/resource?page=1&limit=10
 ```
-
-## 关联的实现
-
-| 端点 | 实现方 |
-|------|--------|
-| POST /api/resource/login | [[user-login]] |
-| POST /api/resource/register | [[user-register]] |
-
-> 链接到实现该端点的 feature 或 module 页面。本页面不重复描述实现逻辑。

@@ -44,8 +44,10 @@ Glob `docs/wiki/wiki.*.json`：
 - **确定模块边界**（依据：目录结构）
   - 有子目录：每个子目录为一个模块
   - 无子目录（平目录）：所有文件视为单一模块
-- 为每个模块列出预估的 features、keyFiles
+- 为每个模块列出预估的 features、keyFiles（3-5 个代表性文件）
+- **跨目录耦合分析**：从 export/import 数据中识别跨目录引用，标注被外部高频引用的文件（可能是横切关注点，不应归入单一业务模块）
 - 标注低置信度区域
+- 平目录项目文件数 > 20 时，主动建议拆分依据
 - 统计源码文件总量，确定委派策略（≤ 50 主会话内联，> 50 可委派 Agent tool，最多 5 agent）
 
 ### 3.3. 创建 wiki.init.json
@@ -57,7 +59,8 @@ Glob `docs/wiki/wiki.*.json`：
   "plan": {
     "<模块名>": {
       "source": "src/auth/",
-      "features": ["login", "register"]
+      "features": ["login", "register"],
+      "keyFiles": ["AuthService.kt", "LoginController.kt", "TokenManager.kt"]
     }
   }
 }
@@ -70,6 +73,7 @@ Glob `docs/wiki/wiki.*.json`：
 | plan | object | 模块规划，Phase 1 写入，Phase 2 只读 |
 | plan[X].source | string | 模块对应的源码目录 |
 | plan[X].features | string[] | 预估 feature 名称列表 |
+| plan[X].keyFiles | string[] | 代表性文件（3-5 个），用于确认时展示 |
 
 **状态流转**：Phase 1 扫描后写入 plan + pending → 逐模块处理，将模块从 pending 移到 completed → Phase 3 收尾后删除文件。
 
@@ -77,13 +81,24 @@ Glob `docs/wiki/wiki.*.json`：
 
 AskUserQuestion 展示模块划分方案：
 
-> **模块划分方案**：
-> - auth (src/auth/, ~12 files) -> features: login, register, token-refresh
-> - order (src/order/, ~8 files) -> features: create, track
+> **模块划分方案**（基于目录结构自动推断）：
+>
+> - auth (src/auth/, 12 files)
+>   关键文件: AuthService.kt, LoginController.kt, TokenManager.kt
+>   → features: login, register, token-refresh
+>
+> - order (src/order/, 8 files)
+>   关键文件: OrderService.kt, PaymentGateway.kt
+>   → features: create, track
+>
+> ⚠ 跨目录耦合: auth.utils.kt 被 order/ 引用 3 次
+> ⚠ 低置信度: utils/ 目录含多种不相关工具，建议评估是否拆分
 >
 > **委派策略**：源码共 ~45 文件，主会话内联处理
 >
 > 此划分是否合理？可以调整模块的合并、拆分或重命名。
+
+展示内容来源：模块名和 features 来自 plan；关键文件来自 plan[X].keyFiles；跨目录耦合和低置信度来自步骤 3.2 分析。
 
 用户确认后：如需调整则更新 wiki.init.json，进入步骤 4。
 
