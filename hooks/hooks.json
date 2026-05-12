@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/wiki-hook.js"
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/wiki-hook.js"]
           }
         ]
       }
@@ -17,7 +18,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/wiki-hook.js"
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/wiki-hook.js"]
           }
         ]
       }

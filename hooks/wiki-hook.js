@@ -278,7 +278,7 @@ async function main() {
 }
 
 function fail(msg) {
-  console.log(msg);
+  process.stderr.write(msg + '\n');
   process.exit(2);
 }
 
