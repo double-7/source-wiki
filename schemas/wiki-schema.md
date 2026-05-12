@@ -142,12 +142,20 @@ depends: []
 - 修改任何 wiki 页面前，先读取该页面的 frontmatter `guidelines`，按原则修改
 - 同模块下多个 feature 共享的设计决策，应提炼到 module 页面的 guidelines
 - 当同类冲突反复出现时，主动建议用户补充 guideline
+- **数量控制**：每页建议 ≤ 10 条 guidelines。超过时 lint 应建议精简
+- **去重合并**：新增 guideline 与已有内容高度重合时合并更新，不重复添加
+- **生命周期**：
+  - 诞生：init 从源码提取 / ingest 从变更提取 / lint 从 pattern 提炼
+  - 消费：init 参考模式读取 / 所有命令修改协议读取
+  - 老化：源码变更使旧 guideline 失效 → init/ingest 冲突检测替换 / lint 一致性检查清理
+  - 死亡：lint 检测到 guideline 与 CODE 矛盾 → 标注并建议移除
 
 ### 3.2 Issues 使用规则
 
 - issues 记录待处理问题，供 lint 统一消费。非 lint 操作不处理 issues
 - issues 是临时字段——写入后由 lint 在下次扫描时独立验证、修复并清除
 - 跨页面问题写在当前命令能直接编辑的页面上
+- **guideline 候选标记**：issues 以 `[guideline]` 前缀开头时，表示此 issue 为 guideline 候选建议。lint 消费时识别此前缀，将 issue 转为 suggestedGuideline 处理而非普通 finding。ingest/query 发现跨页模式时使用此标记。
 
 ### 3.3 依赖驱动拆分
 

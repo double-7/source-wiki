@@ -22,8 +22,19 @@ Glob `docs/wiki/wiki.*.json`：
 |------|------|
 | 有 wiki.init.json | 中断恢复（AskUserQuestion 三选项：恢复/保留重建/完全重来） |
 | 有其他 wiki.*.json | 拒绝："另一个操作正在进行中。请先完成。" |
-| 有 wiki 页面但无临时文件 | AskUserQuestion：重新全量分析（覆盖）还是用 `/sw:ingest` 增量？ |
+| 有 wiki 页面但无临时文件 | AskUserQuestion 三选项：1. 覆盖 — 纯 CODE 重构，不参考已有 wiki；2. 参考 — CODE 重构 + 借鉴已有 guidelines；3. `/sw:ingest` — 增量同步 |
 | 空目录 | 进入步骤 3 |
+
+## 2.5. 参考模式前置操作
+
+用户选择"参考"后，在进入步骤 3 前执行：
+
+1. 使用 query-wiki.js --dump 获取所有页面 frontmatter
+2. 提取所有非空 guidelines，按页面组织为 existingGuidelines
+3. existingGuidelines 作为全局上下文带入后续步骤
+4. 消失模块（新规划中不存在）的 guidelines 丢弃
+
+覆盖模式跳过此步骤，existingGuidelines 为空。
 
 ## 3. 扫描规划
 
@@ -127,6 +138,11 @@ AskUserQuestion 展示模块划分方案：
 
 **原则**：只写人类不容易从代码直接看到的内容（协作关系、设计意图、隐式约定）。不确定边界时宁可稍大。
 
+如存在 existingGuidelines：
+- 筛选与当前模块相关的 guidelines（匹配模块名或 feature 名）
+- 分析源码时参考这些 guidelines，确保生成内容遵循已有设计决策约束
+- CODE 与 guidelines 冲突时 CODE 胜出
+
 ### 4.2. 确定 features
 
 按建页标准划分 feature：
@@ -144,6 +160,12 @@ AskUserQuestion 展示模块划分方案：
 - 命名约定
 
 每条 guideline 一句话，记录"为什么这样做"。仅提取代码中明确体现的决策，不推断设计意图。
+
+如存在 existingGuidelines，合并策略：
+- 已有 guidelines（用户历史确认的）→ 保留
+- 源码新发现的 guidelines → 追加
+- 两者冲突（源码已变更使旧 guideline 不再成立）→ 新 guideline 优先，标注差异
+- 已存在或高度重合 → 合并去重
 
 ### 4.4. 创建页面
 
@@ -177,7 +199,7 @@ pending 为空，进入步骤 5。
 
 ### 5.1. 推断 flow 并确认
 
-基于步骤 4 收集的跨模块关系线索，推断业务流程。
+基于步骤 4 收集的跨模块关系线索，推断业务流程。如存在 existingGuidelines，参考其架构级约束。
 
 **必须调用 AskUserQuestion** 展示推断结果（阻断步骤，未经确认不得创建 flow 页面）：
 
@@ -193,7 +215,7 @@ pending 为空，进入步骤 5。
 
 ### 5.3. 推断 architecture 页面并确认
 
-基于已有全部页面（modules、features、flows）的上下文，推断需要哪些 architecture 级页面。overview.md 始终创建，其他页面根据项目特征判断。
+基于已有全部页面（modules、features、flows）的上下文，推断需要哪些 architecture 级页面。overview.md 始终创建，其他页面根据项目特征判断。如存在 existingGuidelines，参考其架构级约束。
 
 **必须调用 AskUserQuestion** 展示推断结果（阻断步骤，未经确认不得创建 architecture 页面）：
 

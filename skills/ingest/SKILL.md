@@ -142,6 +142,12 @@ AskUserQuestion 展示影响分析：
 5. 特殊情况：
    - 新增文件无法归属现有 feature → 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 创建新 feature 页面
    - 删除文件导致 feature 的 source 全部不存在 → 删除该 feature 页面，更新所属 module 的 features 字段
+6. Guidelines 提取（单页）：
+   - 源码变更揭示了新的设计决策或架构约定 → 提取为 guideline（判断标准：变更体现了可复用的模式或约束）
+   - 源码变更使旧 guideline 失效 → 标注冲突，更新或移除
+   - 与页面已有 guidelines 对比，去重合并
+   - 写入页面 frontmatter
+   - 注意：不是每次变更都产生 guideline，只有变更揭示了设计决策（而非事实细节）时才提取
 
 ### 4.2. type == "indirect"
 
@@ -151,6 +157,10 @@ AskUserQuestion 展示影响分析：
 2. 读取 reason 中提到的变更模块相关源码（如 indirect 是因 module 下的 feature 变更）
 3. 按修复边界决策处理（wiki-schema.md 修复边界规则）
 4. 修改页面时同步更新 frontmatter `updated`
+5. 跨页 guidelines 发现：
+   - 间接影响揭示了跨页模式或约定（如多个模块都受同一变更影响）→ 记录 issue，格式：`[guideline] 模式描述 — ingest 日期`
+   - `[guideline]` 前缀标记此 issue 为 guideline 候选建议，供 lint 消费
+   - Ingest 不做跨页 guidelines 提取（缺少全局上下文）
 
 ### 4.3. 更新 wiki.ingest.json
 

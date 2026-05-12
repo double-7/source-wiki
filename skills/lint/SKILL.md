@@ -1,12 +1,12 @@
 ---
 name: sw:lint
 description: "对 wiki 知识库进行健康检查。单会话自包含流程：规划维度、逐维度检查、汇总报告"
-argument-hint: "[module-name]"
+argument-hint: "[module-name | instruction]"
 user-invocable: true
 disable-model-invocation: true
 ---
 
-对 wiki 知识库进行健康检查。支持全量和定向分析。
+对 wiki 知识库进行健康检查。支持全量扫描、定向分析和指令模式。
 
 ## 1. 前置步骤
 
@@ -28,11 +28,18 @@ Glob `docs/wiki/wiki.*.json`：
 
 解析 `$ARGUMENTS`：
 
-- **无参数** → 全量扫描（`scope: ""`）
-- **有参数**（如 `auth`）→ 定向扫描：
+- **无参数** → 全量扫描（`scope: ""`，`mode: "scan"`）
+- **模块名**（如 `auth`）→ 定向扫描（`mode: "scan"`）：
   1. 使用 query-wiki.js 查找匹配的 module 页面
   2. 匹配到 → 范围：该模块页面 + 关联 feature 页面 + 涉及该模块的 flow
-  3. 未匹配 → 报错："未找到模块 '{参数}'。可用模块：" + 列表，退出
+  3. 未匹配 → 尝试指令模式（见下）
+- **自然语言指令**（非模块名）→ 指令模式（`mode: "instruct"`）：
+  - 将 `$ARGUMENTS` 解析为用户意图（如"检查认证相关的描述是否准确"）
+  - 识别涉及的 wiki 页面范围
+  - 用户意图为最高优先级
+  - 破坏性操作需额外确认
+
+当参数不是已知模块名时，LLM 判断是模块名匹配失败还是用户指令。判断依据：参数长度 > 5 个词、包含动词/描述性语句 → 指令模式。
 
 ### 3.2. 全量扫描获取当前状态
 
@@ -45,22 +52,34 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 ```json
 {
   "scope": "",
+  "mode": "scan",
   "dimensions": {
     "freshness": "pending",
     "coverage": "pending",
     "integrity": "pending",
     "consistency": "pending"
   },
-  "findings": []
+  "findings": [],
+  "suggestedGuidelines": []
 }
 ```
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | scope | string | `""` = 全量扫描，模块名 = 针对性扫描 |
+| mode | string | `"scan"` = 全量/定向扫描，`"instruct"` = 指令模式 |
 | dimensions | object | 四维度执行状态 |
 | dimensions[X] | string | `"pending"` 或 `"completed"`（X ∈ {freshness, coverage, integrity, consistency}） |
 | findings | finding[] | 累积发现 |
+| suggestedGuidelines | object[] | guideline 候选列表 |
+
+**suggestedGuidelines 结构**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| targetPage | string | 建议写入的页面相对路径 |
+| text | string | guideline 内容（一句话） |
+| evidence | string[] | 来源 finding/issue 的描述列表 |
 
 **finding 结构**：
 
@@ -90,6 +109,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field issues 
 - **源码可验证** → 修复并清除 issue
 - **需要用户判断** → 升级为 finding（fixType: content），追加到 wiki.lint.json 的 findings
 - **问题已不存在** → 直接清除 issue
+- **Issue 含 `[guideline]` 前缀** → guideline 候选处理：提取 issue 中描述的模式，转为 suggestedGuideline 追加到 wiki.lint.json，清除该 issue
 
 修复时遵循修改协议：读 guidelines → 修复 → 更新 updated。
 
@@ -117,6 +137,7 @@ Glob 验证每个 source 路径是否存在。不存在的标记为 finding：
 - 检查：正文中 `[[dir/name]]` 双链都有对应的实际文件
 - 检查：无孤立页面（每个页面至少被一个其他页面或 index.md 引用）
 - 缺失的标记为 finding，severity: medium
+- **遗漏检测**：扫描源码目录，收集未被任何 feature 页面 `source` 字段覆盖的源码文件。未覆盖文件聚集在同一目录（≥ 3 个）→ 标记为 finding，severity: medium，建议新建 feature 或扩展已有 feature。零散文件可忽略。
 
 ### 5.3. integrity — 数据完整性
 
@@ -137,12 +158,39 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 - 同一概念在不同页面术语一致
 - 页面内容匹配其层级（如 flow 页面不应描述单 feature 的内部实现）
 - 交叉引用有效：depends 引用目标页面存在；下级引用目标页面存在
+- **CODE 验证**：对 feature 页面的 `source` 字段引用的源码文件，抽样读取关键部分（导出签名、类型定义），与 wiki 描述比对。描述与源码不一致 → 标记为 finding，severity 按偏差程度定（high: 核心逻辑错误；medium: 细节不准确；low: 表述可优化）
 
 ### 5.5. 即时保存
 
 每完成一个维度，追加 findings 并保存 wiki.lint.json。每条 finding 包含：dimension、severity（high/medium/low）、page、description、fixType（safe/content/none）、fixPlan。safe 类型直接修复（更新页面内容和 frontmatter）。
 
 确保中断后已完成的维度结果不丢失。
+
+### 5.6. Guidelines 提炼
+
+分析所有 findings 中的重复模式：
+
+1. LLM 语义判断哪些 findings 描述同类问题（不依赖关键词匹配）
+2. 同类 findings ≥ 2 个 → 候选 guideline
+3. 每个候选 guideline 生成：
+   - targetPage: 建议写入哪个页面（通常为涉及的 module 或 feature 页面）
+   - text: guideline 内容（一句话，描述"应怎样做"）
+   - evidence: 来源 finding 列表
+4. 对比目标页面已有 guidelines：
+   - 已存在相同或高度重合 → 合并更新
+   - 目标页面 guidelines 总数 > 10 → 建议精简
+5. 追加到 wiki.lint.json.suggestedGuidelines（与步骤 4 中 `[guideline]` issues 合并）
+
+### 5.7. 指令模式执行
+
+当 mode == "instruct" 时，在维度检查和 guidelines 提炼完成后执行：
+
+1. 将用户指令解析为具体操作列表
+2. 对每个操作：
+   - 涉及的 wiki 页面存在 → 读取页面 + 读取相关源码验证
+   - 用户指令与 CODE 事实矛盾 → 警告但不阻断，AskUserQuestion 确认
+   - 破坏性操作（删除 > 50% 内容、清空 guidelines、删除系统文件）→ AskUserQuestion 额外确认
+3. 用户确认后执行操作，更新页面 frontmatter `updated`
 
 ## 6. 汇总报告
 
@@ -175,11 +223,22 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 
 用户确认后执行修复、更新页面 frontmatter `updated`。
 
-### 6.5. 清理
+### 6.5. Guidelines 确认
+
+如有 suggestedGuidelines（来自 findings 模式提炼 + `[guideline]` issues 升级），AskUserQuestion 展示：
+
+> 以下 guidelines 建议添加：
+> 1. [modules/auth.md] "认证服务统一使用 OAuth2 协议"
+>    依据：features/login 和 features/token-refresh 均出现协议描述不一致
+> 是否添加？
+
+用户逐条确认后，写入对应页面的 guidelines 字段，更新 frontmatter updated。用户拒绝的 guideline 丢弃。
+
+### 6.6. 清理
 
 删除 `docs/wiki/wiki.lint.json`。
 
-### 6.6. 更新 index.md.updated + 追加 log.md
+### 6.7. 更新 index.md.updated + 追加 log.md
 
 - 将 index.md 的 `updated` 更新为当前秒级 ISO 时间戳
 - 按格式追加检查结果摘要：维度和发现数、已修复和待确认的问题、建议后续步骤
