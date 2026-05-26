@@ -3,7 +3,6 @@ name: sw:init
 description: "全量分析：扫描源码 → 逐模块处理 → 收尾。自动检测状态从断点继续"
 argument-hint: "[source-path]"
 user-invocable: true
-disable-model-invocation: true
 ---
 
 全量初始化——从源码构建完整的 wiki 知识库。

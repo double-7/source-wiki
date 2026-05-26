@@ -3,7 +3,6 @@ name: sw:lint
 description: "对 wiki 知识库进行健康检查。单会话自包含流程：规划维度、逐维度检查、汇总报告"
 argument-hint: "[module-name | instruction]"
 user-invocable: true
-disable-model-invocation: true
 ---
 
 对 wiki 知识库进行健康检查。支持全量扫描、定向分析和指令模式。

@@ -2,7 +2,6 @@
 name: sw:ingest
 description: "增量同步 wiki 与源码变更。检测变更、构建影响图、逐 target 处理"
 user-invocable: true
-disable-model-invocation: true
 ---
 
 单会话自包含流程——增量同步源码变更到 wiki。

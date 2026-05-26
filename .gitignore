@@ -1,3 +1,4 @@
 .obsidian/
 *.local.md
 *.local.json
+*.local.html

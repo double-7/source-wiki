@@ -3,7 +3,6 @@ name: sw:query
 description: "基于 wiki 知识库回答关于代码库的问题"
 argument-hint: "[question]"
 user-invocable: true
-disable-model-invocation: true
 ---
 
 查询 wiki 知识库并回答问题。直接在用户会话中执行，不使用 REACT。
