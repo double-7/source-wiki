@@ -11,7 +11,7 @@ user-invocable: true
 
 ## 1. 前置步骤
 
-读取 `${CLAUDE_PLUGIN_ROOT}/schemas/wiki-schema.md` 加载共享规则（知识模型、frontmatter schema、页面格式、修改协议、修复边界）。
+读取 `${CLAUDE_PLUGIN_ROOT}/schemas/wiki-schema.md` 加载共享规则（知识模型、frontmatter schema、页面格式、修改约束、修复边界分类）。
 
 ## 2. 状态判断
 
@@ -169,8 +169,8 @@ AskUserQuestion 展示模块划分方案：
 ### 4.4. 创建页面
 
 - 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 和 `${CLAUDE_PLUGIN_ROOT}/templates/module.md`
-- 创建 feature 页面（含完整 frontmatter：title、created、updated、source、tags、guidelines）
-- 创建 module 页面（含完整 frontmatter：title、created、updated、features 引用、tags、guidelines）
+- 创建 feature 页面（含完整 frontmatter：title、created、updated、source、tags、guidelines、issues）
+- 创建 module 页面（含完整 frontmatter：title、created、updated、features 引用、tags、guidelines、issues）
 - **一次性创建完整页面，不创建 stub**
 
 feature 页面的 `source` 字段填充映射的源码文件路径。
@@ -233,9 +233,11 @@ pending 为空，进入步骤 5。
 2. **回读源码**填充细节（如 api.md 需要读取路由定义，deployment.md 需要读取 Dockerfile 等）
 3. 有源码证据的章节正常填充；无源码证据但模板要求的章节直接删除该章节；整个页面无足够信息则提示用户
 4. 创建 architecture 页面（overview.md 必选，其他按确认结果）
+5. overview.md 的 `modules` 字段必须填充所有已创建模块的双链（如 `[[modules/auth]]`），不得留空
 
-### 5.5. 创建 index.md、log.md、.gitignore
+### 5.5. 创建 index.md、log.md、.gitignore 及空目录
 
+- **queries/ 目录**：创建 `docs/wiki/queries/` 目录（`mkdir -p docs/wiki/queries`）。其他类型目录在步骤 4-5.4 中已由页面写入隐式创建，queries/ 仅由 query 命令按需写入，需在此显式创建
 - **index.md**：完整版导航，包含所有已创建的页面双链引用
 - **log.md**：初始条目（格式见 wiki-schema.md 日志格式）
 - **.gitignore**：确保排除 wiki.*.json：

@@ -58,11 +58,11 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source 
 1. 在回答中说明发现的矛盾
 2. AskUserQuestion 展示详情，询问是否修正
 3. 用户确认 → 执行 inline fix（修改页面 + 更新 frontmatter updated）
-4. 用户拒绝 → 写 issues 到页面 frontmatter
+4. 用户拒绝 → 写 issues 到页面 frontmatter（不更新 `updated`，仅写 issues 不算内容修改）
 
 **复杂不一致**（跨页面、需要全局判断）：
 1. 在回答中说明发现的不一致
-2. 写 issues 到相关页面 frontmatter
+2. 写 issues 到相关页面 frontmatter（不更新 `updated`，仅写 issues 不算内容修改）
 3. 告知用户"已记录。运行 `/sw:lint` 将统一处理。"
 
 ## 4. 沉淀控制
@@ -97,7 +97,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source 
 
 ### 4.3. 用户确认沉淀后
 
-**新增页面**——创建页面（含完整 frontmatter），更新 index.md。
+**新增页面**——读取 `${CLAUDE_PLUGIN_ROOT}/templates/query.md`，基于模板创建页面（含完整 frontmatter），更新 index.md。
 
 **更新已有页面**——将内容写入目标页面，更新 frontmatter `updated`。
 

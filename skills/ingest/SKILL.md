@@ -184,7 +184,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 4. 修改页面时同步更新 frontmatter `updated` 为当前秒级 ISO 时间戳
 5. 特殊情况：
    - 新增文件无法归属现有 feature → 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 创建新 feature 页面
-   - 删除文件导致 feature 的 source 全部不存在 → 删除该 feature 页面，更新所属 module 的 features 字段
+   - 删除文件导致 feature 的 source 全部不存在 → 在该 feature 页面记录 issue：`[structural] source 全部不存在，建议删除此页面 — ingest 日期`。不自动删除（结构性变更属于修复边界的"只记录不修"，由 lint 或用户确认后处理）
 6. Guidelines 提取（单页）：
    - 源码变更揭示了新的设计决策或架构约定 → 提取为 guideline（判断标准：变更体现了可复用的模式或约束）
    - intent 明确描述了设计决策 → 优先提取为 guideline
@@ -199,7 +199,10 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 1. 读取目标页面，获取 frontmatter 的 `guidelines` 和 `issues`
 2. 读取 reason 中提到的变更模块相关源码（如 indirect 是因 module 下的 feature 变更）
-3. 按修复边界决策处理（wiki-schema.md 修复边界规则）
+3. 按修复边界决策处理：
+   - **机械修正**（路径替换、事实修正、字段同步）→ 直接执行
+   - **内容更新**（非机械性单页更新、跨引用修正）→ AskUserQuestion 确认后执行
+   - **只记录不修**（跨页面一致性、全局视角判断、信息不足、结构性变更）→ 写 issues，留给 lint
 4. 非交互模式下：不修改页面内容，仅记录 issue，格式：`[auto-skip] indirect target 未自动处理 — ingest 日期`
 5. 修改页面时同步更新 frontmatter `updated`（非交互模式下跳过此步骤）
 6. 跨页 guidelines 发现：

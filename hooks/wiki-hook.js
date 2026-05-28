@@ -60,13 +60,17 @@ function validateInit(json) {
   if (e.length) return e;
   requireArr(json, 'pending', 'string', e);
   requireArr(json, 'completed', 'string', e);
-  if (typeof json.plan !== 'object' || Array.isArray(json.plan)) {
+  if (typeof json.plan !== 'object' || Array.isArray(json.plan) || json.plan === null) {
     e.push('plan must be an object');
   } else if (json.plan) {
     for (const [k, v] of Object.entries(json.plan)) {
-      if (typeof v !== 'object' || Array.isArray(v)) { e.push(`plan["${k}"] must be an object`); continue; }
+      if (typeof v !== 'object' || Array.isArray(v) || v === null) { e.push(`plan["${k}"] must be an object`); continue; }
       if (typeof v.source !== 'string') e.push(`plan["${k}"].source must be a string`);
       if (!Array.isArray(v.features)) e.push(`plan["${k}"].features must be an array`);
+      if ('keyFiles' in v) {
+        if (!Array.isArray(v.keyFiles)) { e.push(`plan["${k}"].keyFiles must be an array`); }
+        else { for (const f of v.keyFiles) { if (typeof f !== 'string') e.push(`plan["${k}"].keyFiles elements must be strings`); } }
+      }
     }
   }
   return e;
@@ -86,7 +90,7 @@ function validateIngest(json) {
     if (!Array.isArray(json[field])) { e.push(`${field} must be an array`); continue; }
     for (let i = 0; i < json[field].length; i++) {
       const t = json[field][i];
-      if (typeof t !== 'object' || Array.isArray(t)) { e.push(`${field}[${i}] must be an object`); continue; }
+      if (typeof t !== 'object' || Array.isArray(t) || t === null) { e.push(`${field}[${i}] must be an object`); continue; }
       if (typeof t.id !== 'string') e.push(`${field}[${i}].id must be a string`);
       if (!targetTypes.has(t.type)) e.push(`${field}[${i}].type must be "direct", "indirect", or "intent"`);
       if (typeof t.reason !== 'string') e.push(`${field}[${i}].reason must be a string`);
@@ -100,8 +104,10 @@ function validateLint(json) {
   requireObj(json, e, 'top level');
   if (e.length) return e;
   if (typeof json.scope !== 'string') e.push('scope must be a string');
+  const validModes = new Set(['scan', 'instruct']);
+  if ('mode' in json && !validModes.has(json.mode)) e.push('mode must be "scan" or "instruct"');
   // dimensions
-  if (typeof json.dimensions !== 'object' || Array.isArray(json.dimensions)) {
+  if (typeof json.dimensions !== 'object' || Array.isArray(json.dimensions) || json.dimensions === null) {
     e.push('dimensions must be an object');
   } else {
     for (const d of ['freshness', 'coverage', 'integrity', 'consistency']) {
@@ -111,13 +117,27 @@ function validateLint(json) {
       }
     }
   }
+  // suggestedGuidelines
+  if ('suggestedGuidelines' in json) {
+    if (!Array.isArray(json.suggestedGuidelines)) { e.push('suggestedGuidelines must be an array'); }
+    else {
+      for (let i = 0; i < json.suggestedGuidelines.length; i++) {
+        const g = json.suggestedGuidelines[i];
+        if (typeof g !== 'object' || Array.isArray(g) || g === null) { e.push(`suggestedGuidelines[${i}] must be an object`); continue; }
+        if (typeof g.targetPage !== 'string') e.push(`suggestedGuidelines[${i}].targetPage must be a string`);
+        if (typeof g.text !== 'string') e.push(`suggestedGuidelines[${i}].text must be a string`);
+        if (!Array.isArray(g.evidence)) { e.push(`suggestedGuidelines[${i}].evidence must be an array`); }
+        else { for (const ev of g.evidence) { if (typeof ev !== 'string') { e.push(`suggestedGuidelines[${i}].evidence elements must be strings`); break; } } }
+      }
+    }
+  }
   // findings
   if (!Array.isArray(json.findings)) { e.push('findings must be an array'); return e; }
   const severities = new Set(['high', 'medium', 'low']);
   const fixTypes = new Set(['safe', 'content', 'none']);
   for (let i = 0; i < json.findings.length; i++) {
     const f = json.findings[i];
-    if (typeof f !== 'object' || Array.isArray(f)) { e.push(`findings[${i}] must be an object`); continue; }
+    if (typeof f !== 'object' || Array.isArray(f) || f === null) { e.push(`findings[${i}] must be an object`); continue; }
     if (typeof f.dimension !== 'string') e.push(`findings[${i}].dimension must be a string`);
     if (!severities.has(f.severity)) e.push(`findings[${i}].severity must be "high", "medium", or "low"`);
     if (typeof f.page !== 'string') e.push(`findings[${i}].page must be a string`);
@@ -146,7 +166,11 @@ const TYPE_FIELDS = {
 
 function validateFrontmatter(fm, pageType) {
   const e = [];
-  if (typeof fm !== 'object' || Array.isArray(fm)) return ['frontmatter must be an object'];
+  if (typeof fm !== 'object' || Array.isArray(fm) || fm === null) return ['frontmatter must be an object'];
+
+  // 遗留字段拒绝（设计决策 #4、#5）
+  if ('type' in fm) e.push('legacy field "type" is not allowed (type is determined by directory)');
+  if ('related' in fm) e.push('legacy field "related" is not allowed (use depends or typed-name fields)');
 
   const required = FM_REQUIRED[pageType] || [];
   for (const f of required) {
@@ -214,7 +238,7 @@ function validateLinkArray(arr, fieldName, expectedDir, errors) {
 
 // ── 通用辅助 ────────────────────────────────────────
 function requireObj(v, errors, ctx) {
-  if (typeof v !== 'object' || Array.isArray(v)) errors.push(`${ctx} must be an object`);
+  if (typeof v !== 'object' || Array.isArray(v) || v === null) errors.push(`${ctx} must be an object`);
 }
 function requireArr(parent, key, itemType, errors) {
   if (!Array.isArray(parent[key])) { errors.push(`${key} must be an array`); return; }

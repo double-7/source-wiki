@@ -62,18 +62,18 @@ docs/wiki/
 ### 2.2 模板参考
 
 创建页面时读取 `${CLAUDE_PLUGIN_ROOT}/templates/<类型>.md`：
-`index.md`、`overview.md`、`module.md`、`feature.md`、`flow.md`、`api.md`、`conventions.md`、`deployment.md`
+`index.md`、`overview.md`、`module.md`、`feature.md`、`flow.md`、`api.md`、`conventions.md`、`deployment.md`、`query.md`
 
 ### 2.3 通用字段
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| title | string | 人类可读标题，与文件名语义一致 |
-| created | string | ISO 8601 秒级时间戳（`2026-04-21T14:30:00Z`） |
-| updated | string | ISO 8601 秒级时间戳，每次修改时更新 |
-| tags | string[] | 自由标签。module 可用关注点标签（`infrastructure`、`cross-cutting`、`utility`） |
-| guidelines | string[] | 设计决策约束，记录为什么这样做 |
-| issues | string[] | 待处理问题，格式：`问题描述 — 来源 日期` |
+| 字段 | 必需 | 类型 | 说明 |
+|------|------|------|------|
+| title | 是 | string | 人类可读标题，与文件名语义一致 |
+| created | 是 | string | ISO 8601 秒级时间戳（`2026-04-21T14:30:00Z`） |
+| updated | 是 | string | ISO 8601 秒级时间戳，每次修改时更新 |
+| tags | 是 | string[] | 自由标签。module 可用关注点标签（`infrastructure`、`cross-cutting`、`utility`） |
+| guidelines | 否 | string[] | 设计决策约束，记录为什么这样做。有内容时写入，无内容时省略 |
+| issues | 否 | string[] | 待处理问题，格式：`问题描述 — 来源 日期`。有内容时写入，无内容时省略 |
 
 ### 2.4 关系字段
 
@@ -156,41 +156,28 @@ depends: []
 - issues 是临时字段——写入后由 lint 在下次扫描时独立验证、修复并清除
 - 跨页面问题写在当前命令能直接编辑的页面上
 - **guideline 候选标记**：issues 以 `[guideline]` 前缀开头时，表示此 issue 为 guideline 候选建议。lint 消费时识别此前缀，将 issue 转为 suggestedGuideline 处理而非普通 finding。ingest/query 发现跨页模式时使用此标记。
+- **ingest 专用分类**（lint 按普通 issue 处理）：
+  - `[auto-skip]`：非交互模式下 indirect target 未自动修改页面，需人工确认
+  - `[intent]`：intent 推导的 target 无直接 diff 证据，记录用户意图供后续验证
+  - `[structural]`：需要结构性变更（如页面删除）但属于"只记录不修"，需 lint 或用户确认
 
 ### 3.3 依赖驱动拆分
 
 当 feature-A 内的某个能力被 feature-B 依赖时，该能力应拆分为独立 feature-C。A 和 B 都通过 depends 引用 C。
 
-### 3.4 修改协议
+### 3.4 修改约束
 
-任何修改 wiki 页面内容的操作必须遵循：
+- 修改页面内容时，必须先读取 frontmatter `guidelines`，修改结果须符合其中声明的原则
+- 修改页面内容时，frontmatter `updated` 必须更新为当前秒级 ISO 时间戳
+- 仅修改 frontmatter `issues`（不做内容修改）时，不更新 `updated`
 
-1. 读取目标页面的 frontmatter `guidelines`，按原则修改
-2. 读取目标页面的 frontmatter `issues`（如存在），了解已知问题（仅 lint 处理 issues）
-3. 执行修改
-4. 更新 frontmatter `updated` 为当前秒级 ISO 时间戳
+### 3.5 修复边界分类
 
-**例外**：仅写 issues 到 frontmatter（不做内容修改）时，只执行步骤 1-3，不更新 `updated`。
-
-### 3.5 修复边界
-
-```
-自动修（无需确认）
-  ├─ 路径替换（rename）
-  ├─ 单页面事实修正（源码明确验证）
-  └─ frontmatter 字段同步
-
-需确认
-  ├─ 单页面内容更新（非机械性）
-  └─ 简单跨引用修正
-  触发方式：AskUserQuestion 确认后执行
-
-只记录不修（写 issues，留给 lint）
-  ├─ 跨页面一致性修复
-  ├─ 需要全局视角的判断（模块归属、层级调整）
-  ├─ 信息不足以自信修复的任何场景
-  └─ 结构性变更（页面拆分/合并/创建）
-```
+| 分类 | 范围 | 证据要求 |
+|------|------|---------|
+| 机械修正 | 路径替换、单页面事实修正（源码明确验证）、frontmatter 字段同步 | 源码可直接验证 |
+| 内容更新 | 单页面内容更新（非机械性）、简单跨引用修正 | 需人工确认 |
+| 只记录不修 | 跨页面一致性、全局视角判断（模块归属/层级调整）、信息不足场景、结构性变更（拆分/合并/创建/删除） | 无 — 写 issues 留给 lint |
 
 ### 3.6 日志格式
 

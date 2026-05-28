@@ -110,7 +110,13 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field issues 
 - **问题已不存在** → 直接清除 issue
 - **Issue 含 `[guideline]` 前缀** → guideline 候选处理：提取 issue 中描述的模式，转为 suggestedGuideline 追加到 wiki.lint.json，清除该 issue
 
-修复时遵循修改协议：读 guidelines → 修复 → 更新 updated。
+修复时遵循修改协议：
+1. 读取目标页面的 frontmatter `guidelines`，按原则修改
+2. 读取目标页面的 frontmatter `issues`（如存在），了解已知问题
+3. 执行修改
+4. 更新 frontmatter `updated` 为当前秒级 ISO 时间戳
+
+仅写 issues 到 frontmatter（不做内容修改）时，不更新 `updated`。
 
 ## 5. 维度检查
 

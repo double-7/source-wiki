@@ -3,8 +3,6 @@ title: "{{功能名}}"
 created: 2026-04-21T00:00:00Z
 updated: 2026-04-21T00:00:00Z
 tags: []
-guidelines: []
-issues: []
 depends: []
 source: ["src/path/file.ts", "src/path/model.ts"]
 ---
