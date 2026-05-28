@@ -77,14 +77,18 @@ function validateIngest(json) {
   requireObj(json, e, 'top level');
   if (e.length) return e;
   if (typeof json.anchor !== 'string') e.push('anchor must be a string');
+  if ('intent' in json && typeof json.intent !== 'string') e.push('intent must be a string when present');
+  const validModes = new Set(['interactive', 'auto']);
+  if ('mode' in json && !validModes.has(json.mode)) e.push('mode must be "interactive" or "auto"');
   requireArr(json, 'changedFiles', 'string', e);
+  const targetTypes = new Set(['direct', 'indirect', 'intent']);
   for (const field of ['pending', 'completed']) {
     if (!Array.isArray(json[field])) { e.push(`${field} must be an array`); continue; }
     for (let i = 0; i < json[field].length; i++) {
       const t = json[field][i];
       if (typeof t !== 'object' || Array.isArray(t)) { e.push(`${field}[${i}] must be an object`); continue; }
       if (typeof t.id !== 'string') e.push(`${field}[${i}].id must be a string`);
-      if (t.type !== 'direct' && t.type !== 'indirect') e.push(`${field}[${i}].type must be "direct" or "indirect"`);
+      if (!targetTypes.has(t.type)) e.push(`${field}[${i}].type must be "direct", "indirect", or "intent"`);
       if (typeof t.reason !== 'string') e.push(`${field}[${i}].reason must be a string`);
     }
   }
