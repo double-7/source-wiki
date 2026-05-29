@@ -105,7 +105,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field issues 
 
 对每个有 issues 的页面，逐个验证：
 
-- **源码可验证** → 修复并清除 issue
+- **源码可验证且属于机械修正**（见 wiki-schema.md §3.5）→ 修复并清除 issue
+- **源码可验证但属于内容更新** → 升级为 finding（fixType: content），追加到 wiki.lint.json 的 findings
 - **需要用户判断** → 升级为 finding（fixType: content），追加到 wiki.lint.json 的 findings
 - **问题已不存在** → 直接清除 issue
 - **Issue 含 `[guideline]` 前缀** → guideline 候选处理：提取 issue 中描述的模式，转为 suggestedGuideline 追加到 wiki.lint.json，清除该 issue

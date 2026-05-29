@@ -114,6 +114,7 @@ function pageType(rel) {
 
 // ── 字段过滤 ───────────────────────────────────────
 function matchField(value) {
+  if (value === undefined || value === null) return false;
   if (containsVal !== null) {
     if (Array.isArray(value)) return value.some(v => String(v).includes(containsVal));
     if (typeof value === 'string') return value.includes(containsVal);
@@ -175,6 +176,7 @@ for (const full of files) {
     const val = fm[fieldOpt];
     if (containsVal === null && equalsVal === null && !notEmptyOpt) {
       if (val === undefined || val === null) continue;
+      if (typeof val === 'string' && val.trim() === '') continue;
       if (Array.isArray(val) && val.length === 0) continue;
     } else if (!matchField(val)) continue;
   }

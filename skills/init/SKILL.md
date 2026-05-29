@@ -31,7 +31,7 @@ Glob `docs/wiki/wiki.*.json`：
 1. 使用 query-wiki.js --dump 获取所有页面 frontmatter
 2. 提取所有非空 guidelines，按页面组织为 existingGuidelines
 3. existingGuidelines 作为全局上下文带入后续步骤
-4. 消失模块（新规划中不存在）的 guidelines 丢弃
+4. 消失模块的 guidelines 丢弃 — 筛选推迟到步骤 3.2 确定模块边界后执行：步骤 3.2 确定新规划中的模块集合，不在该集合中的模块对应的 existingGuidelines 丢弃
 
 覆盖模式跳过此步骤，existingGuidelines 为空。
 
@@ -169,8 +169,8 @@ AskUserQuestion 展示模块划分方案：
 ### 4.4. 创建页面
 
 - 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 和 `${CLAUDE_PLUGIN_ROOT}/templates/module.md`
-- 创建 feature 页面（含完整 frontmatter：title、created、updated、source、tags、guidelines、issues）
-- 创建 module 页面（含完整 frontmatter：title、created、updated、features 引用、tags、guidelines、issues）
+- 创建 feature 页面（frontmatter 必需：title、created、updated、source、tags；可选：guidelines、issues — 有内容时写入，无内容时省略）
+- 创建 module 页面（frontmatter 必需：title、created、updated、features、tags；可选：guidelines、issues — 有内容时写入，无内容时省略）
 - **一次性创建完整页面，不创建 stub**
 
 feature 页面的 `source` 字段填充映射的源码文件路径。
@@ -178,7 +178,13 @@ module 页面的 `features` 字段填充 `[[features/页面名]]` 双链数组�
 
 ### 4.5. 自检
 
-回读刚创建的页面，确认 frontmatter 与源码签名一致。只检查本模块内部。
+回读刚创建的页面，逐项确认：
+1. feature 的 source 字段中每个文件存在于源码目录
+2. module 的 features 字段中每个双链对应已创建的 feature 页面
+3. title 非空且与文件名语义一致
+4. created/updated 格式为 ISO 8601
+5. tags 非空且元素为字符串
+发现不一致立即修正。只检查本模块内部。
 
 ### 4.6. 更新 wiki.init.json
 

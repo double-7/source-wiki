@@ -73,10 +73,11 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source 
 
 当回答满足以下条件之一时，AskUserQuestion 询问是否沉淀：
 
-- 综合了多个 wiki 页面的分析
-- 涉及跨模块的对比或关系
-- 包含流程梳理或设计洞察
-- 补充或修正了已有 wiki 页面信息
+- 综合了多个 wiki 页面的分析 → 推荐沉淀为 queries/ 页面
+- 涉及跨模块的对比或关系 → 推荐沉淀为 queries/ 页面或写 issues
+- 包含可复用的设计模式或隐式约定发现 → 建议补充 guideline
+- 补充或修正了已有 wiki 页面信息 → 直接更新目标页面
+- 发现新的业务流程或能力单元 → 建议由 `/sw:ingest` 或 `/sw:init` 执行
 
 询问时展示拟沉淀的完整内容。
 

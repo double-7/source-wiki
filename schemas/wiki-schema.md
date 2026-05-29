@@ -131,7 +131,7 @@ depends: []
 
 所有关系字段可选。
 
-**Query**（`queries/`）：仅 `depends`（可选）。
+**Query**（`queries/`）：通用字段（title、created、updated、tags）必需；仅 `depends`（可选）。
 
 **Index**（`docs/wiki/index.md`）：仅 `title`、`created`、`updated` 必需。
 
@@ -228,3 +228,5 @@ Glob docs/wiki/wiki.*.json
 | 恢复 | 读取临时文件状态，从断点继续 |
 | 保留重建 | 删除临时文件，扫描已完成页面，仅重新规划未完成部分 |
 | 完全重来 | 删除临时文件 + 删除所有 wiki 页面 |
+
+**损坏恢复**：检测到 wiki.<cmd>.json 存在但无法解析为有效 JSON 时，删除损坏文件，扫描已完成页面，仅重新规划未完成部分。

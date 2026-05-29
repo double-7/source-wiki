@@ -176,19 +176,30 @@ function validateFrontmatter(fm, pageType) {
   for (const f of required) {
     if (!(f in fm)) e.push(`missing required field: ${f}`);
   }
-  if (e.length > 2) return e;
+
+  // title: non-empty string
+  if ('title' in fm && (typeof fm.title !== 'string' || fm.title.trim() === ''))
+    e.push('title must be a non-empty string');
 
   // ISO 8601 秒级时间戳
   const isoRe = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
   for (const f of ['created', 'updated']) {
-    if (f in fm && !isoRe.test(String(fm[f]))) {
-      e.push(`invalid ${f}: expected ISO 8601 (e.g. 2026-04-21T14:30:00Z), got "${fm[f]}"`);
+    if (f in fm) {
+      if (fm[f] instanceof Date) continue; // js-yaml 已解析为有效时间戳
+      if (!isoRe.test(String(fm[f])))
+        e.push(`invalid ${f}: expected ISO 8601 (e.g. 2026-04-21T14:30:00Z), got "${fm[f]}"`);
     }
   }
 
-  // 数组字段
+  // 数组字段（类型 + 元素校验）
   for (const f of ['tags', 'guidelines', 'issues']) {
-    if (f in fm && !Array.isArray(fm[f])) e.push(`${f} must be an array`);
+    if (f in fm) {
+      if (!Array.isArray(fm[f])) { e.push(`${f} must be an array`); }
+      else { for (const el of fm[f]) {
+        if (typeof el !== 'string' || el.trim() === '')
+          { e.push(`${f} elements must be non-empty strings`); break; }
+      }}
+    }
   }
 
   // source（feature 专属）
@@ -228,7 +239,7 @@ function validateFrontmatter(fm, pageType) {
 
 function validateLinkArray(arr, fieldName, expectedDir, errors) {
   if (!Array.isArray(arr)) { errors.push(`${fieldName} must be an array`); return; }
-  const re = new RegExp(`^\\[\\[${expectedDir}/[^/\\]]+\\]\\]$`);
+  const re = new RegExp(`^\\[\\[${expectedDir}/[a-z0-9-]+\\]\\]$`);
   for (const v of arr) {
     if (typeof v !== 'string' || !re.test(v)) {
       errors.push(`invalid ${fieldName} format: expected [[${expectedDir}/name]], got "${v}"`);
@@ -254,7 +265,10 @@ function extractFrontmatter(content) {
   if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
   const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return null;
-  try { return jsYaml.load(m[1]); }
+  try {
+    const r = jsYaml.load(m[1]);
+    return (r === undefined || r === null) ? {} : r;
+  }
   catch (e) { return { __error: e.message }; }
 }
 
@@ -275,8 +289,13 @@ async function main() {
   // PostToolUse Edit: tool_input.content 为空，从磁盘读取已编辑的完整文件
   let content = hook.tool_input?.content || hook.content || '';
   if (!content.trim()) {
-    try { content = fs.readFileSync(filePath, 'utf-8'); }
-    catch { process.exit(0); }
+    if (hook.tool_name === 'Edit') {
+      try { content = fs.readFileSync(filePath, 'utf-8'); }
+      catch { process.exit(0); }
+    } else {
+      fail('wiki page file must have content');
+      return;
+    }
   }
 
   if (r.kind === 'temp') {
@@ -290,17 +309,23 @@ async function main() {
     else if (r.type === 'ingest') errors = validateIngest(json);
     else errors = validateLint(json);
 
-    if (errors.length) fail(`wiki.${r.type}.json validation failed:\n${errors.map(x => '  - ' + x).join('\n')}`);
+    if (errors.length) { fail(`wiki.${r.type}.json validation failed:\n${errors.map(x => '  - ' + x).join('\n')}`); return; }
     else process.exit(0);
 
   } else {
     // ── Frontmatter 校验 ──
+    // 文件名规范校验（index.md 除外）
+    if (r.type !== 'index') {
+      const fn = filePath.split('/').pop();
+      if (!/^[a-z0-9-]+\.md$/.test(fn))
+        { fail(`wiki page filename must be lowercase with hyphens, got "${fn}"`); return; }
+    }
     const fm = extractFrontmatter(content);
     if (!fm) process.exit(0); // 无 frontmatter 的 .md 文件不校验
-    if (fm.__error) fail(`invalid YAML frontmatter: ${fm.__error}`);
+    if (fm.__error) { fail(`invalid YAML frontmatter: ${fm.__error}`); return; }
 
     const errors = validateFrontmatter(fm, r.type);
-    if (errors.length) fail(`frontmatter validation failed (${r.type}):\n${errors.map(x => '  - ' + x).join('\n')}`);
+    if (errors.length) { fail(`frontmatter validation failed (${r.type}):\n${errors.map(x => '  - ' + x).join('\n')}`); return; }
     else process.exit(0);
   }
 }

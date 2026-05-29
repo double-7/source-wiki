@@ -85,6 +85,9 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type module -
 
 # module 涉及的 flow
 node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --field modules --contains "[[modules/<module-id>]]"
+
+# architecture 引用受影响的 module
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type architecture --field modules --contains "[[modules/<module-id>]]"
 ```
 
 对每个 target 记录 `id`、`type`（direct/indirect）、`reason`。去重：已在 direct 中的 target 不重复加入 indirect。
@@ -101,7 +104,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 匹配的页面作为 intent target，reason 记录意图原文中的关键词。去重：已在 direct 或 indirect 中的 target 不重复加入 intent。intent target 置信度说明：diff 未直接命中，仅凭用户意图推导。
 
-**新增文件处理**：变更文件无对应 feature 时，判断是否属于新 feature → 加入 direct targets；否则归入最近的已有 feature 的变更范围。
+**新增文件处理**：变更文件无对应 feature 时，判断是否属于新 feature → 加入 direct targets；否则归入 source 路径前缀匹配最长的已有 feature 的变更范围（取该 feature 的 source 数组中与变更文件路径前缀重合最长的条目）。
 
 ### 4.4. 创建 wiki.ingest.json
 
@@ -179,7 +182,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 3. 对比分析：
    - 有结构变化（新增/删除文件、新增/删除导出）→ 按 guidelines 修改页面内容
    - 新旧矛盾（描述与代码不一致）→ 有 guideline 按原则更新，无 guideline 基于源码更新
-   - 无变化 → 跳过，不修改页面
+   - 无变化 → 跳过，不修改页面（仍然从 pending 移到 completed，reason 追加 "；skipped: no change"）
    - intent 非空时参考 intent 理解变更意图；intent 与 diff 事实冲突时以 diff 为准
 4. 修改页面时同步更新 frontmatter `updated` 为当前秒级 ISO 时间戳
 5. 特殊情况：
@@ -226,7 +229,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 ### 5.4. 更新 wiki.ingest.json
 
-每处理完一个 target：从 `pending` 移除该 target，追加到 `completed`。Edit wiki.ingest.json 保存进度，确保中断后可从断点恢复。
+每处理完一个 target（包括跳过的）：从 `pending` 移除该 target，追加到 `completed`。Edit wiki.ingest.json 保存进度，确保中断后可从断点恢复。
 
 ## 6. 汇总报告
 
