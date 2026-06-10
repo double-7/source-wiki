@@ -88,6 +88,12 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 # architecture 引用受影响的 module
 node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type architecture --field modules --contains "[[modules/<module-id>]]"
+
+# flow 直接引用受影响的 feature（flow 有 features 字段）
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --field features --contains "[[features/<target-id>]]"
+
+# architecture 引用受影响的 flow（architecture 有 flows 字段）
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type architecture --field flows --contains "[[flows/<flow-id>]]"
 ```
 
 对每个 target 记录 `id`、`type`（direct/indirect）、`reason`。去重：已在 direct 中的 target 不重复加入 indirect。
@@ -128,7 +134,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --fulltext <常
   "pending": [
     {"id": "login", "type": "direct", "reason": "src/auth/LoginService.kt modified"},
     {"id": "auth-flow", "type": "indirect", "reason": "involves affected module auth"},
-    {"id": "auth-module", "type": "intent", "reason": "intent mentions: 登录双 token 刷新机制"}
+    {"id": "auth", "type": "intent", "reason": "intent mentions: 登录双 token 刷新机制 (module: modules/auth)"}
   ],
   "completed": []
 }
@@ -147,9 +153,9 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --fulltext <常
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| id | string | feature 或 flow 页面名 |
+| id | string | wiki 页面名（不含目录前缀和 .md 扩展名）。可以是 feature、module、flow 或 architecture 页面 |
 | type | string | `"direct"`（source 匹配）、`"indirect"`（关系推导）或 `"intent"`（意图推导） |
-| reason | string | 选中此目标的理由 |
+| reason | string | 选中此目标的理由（应包含足够信息让处理步骤定位页面路径） |
 
 **状态流转**：分析变更后写入 targets → 逐 target 处理，从 pending 移到 completed → 汇总后删除文件。
 
@@ -197,7 +203,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --fulltext <常
    - intent 非空时参考 intent 理解变更意图；intent 与 diff 事实冲突时以 diff 为准
 4. 修改页面时同步更新 frontmatter `updated` 为当前秒级 ISO 时间戳
 5. 特殊情况：
-   - 新增文件无法归属现有 feature → 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 创建新 feature 页面
+   - 新增文件无法归属现有 feature → 读取 `${CLAUDE_PLUGIN_ROOT}/templates/feature.md` 在 `docs/wiki/features/` 目录下创建新 feature 页面。创建后**必须更新所属 module 页面的 features 字段**，追加 `[[features/<新页面名>]]` 双链。如无法确定所属 module，在新 feature 页面记录 issue
    - 删除文件导致 feature 的 source 全部不存在 → 在该 feature 页面记录 issue：`[structural] source 全部不存在，建议删除此页面 — ingest 日期`。不自动删除（结构性变更属于修复边界的"只记录不修"，由 lint 或用户确认后处理）
 6. Guidelines 提取（单页）：
    - 源码变更揭示了新的设计决策或架构约定 → 提取为 guideline（判断标准：变更体现了可复用的模式或约束）
@@ -217,7 +223,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --fulltext <常
    - **机械修正**（路径替换、事实修正、字段同步）→ 直接执行
    - **内容更新**（非机械性单页更新、跨引用修正）→ AskUserQuestion 确认后执行
    - **只记录不修**（跨页面一致性、全局视角判断、信息不足、结构性变更）→ 写 issues，留给 lint
-4. 非交互模式下：不修改页面内容，仅记录 issue，格式：`[auto-skip] indirect target 未自动处理 — ingest 日期`
+4. 非交互模式下：不修改页面内容，仅记录 issue。写入前先清除页面中已有的 `[auto-skip]` 开头的旧 issues（避免累积），然后记录新 issue，格式：`[auto-skip] indirect target 未自动处理 — ingest 日期`
 5. 修改页面时同步更新 frontmatter `updated`（非交互模式下跳过此步骤）
 6. 跨页 guidelines 发现：
    - 间接影响揭示了跨页模式或约定（如多个模块都受同一变更影响）→ 记录 issue，格式：`[guideline] 模式描述 — ingest 日期`
