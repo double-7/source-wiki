@@ -106,6 +106,17 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type flow --f
 
 **新增文件处理**：变更文件无对应 feature 时，判断是否属于新 feature → 加入 direct targets；否则归入 source 路径前缀匹配最长的已有 feature 的变更范围（取该 feature 的 source 数组中与变更文件路径前缀重合最长的条目）。
 
+**常量值变更检测**：diff 中如包含 `static final` / `const` / `enum` / `readonly` 声明的值变更：
+1. 提取变更的常量名和新旧值
+2. 使用 query-wiki.js 搜索 wiki 中引用了旧值或常量名的页面：
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --fulltext <常量名或旧值>
+```
+
+3. 命中页面按类型归类：feature 页面 → direct targets；其他类型页面 → indirect targets。reason 记录 "constant <NAME> changed from <OLD> to <NEW>"
+4. 去重：已在 direct、indirect 或 intent 中的 target 不重复加入
+
 ### 4.4. 创建 wiki.ingest.json
 
 ```json

@@ -56,7 +56,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
     "freshness": "pending",
     "coverage": "pending",
     "integrity": "pending",
-    "consistency": "pending"
+    "consistency": "pending",
+    "factual": "pending"
   },
   "findings": [],
   "suggestedGuidelines": []
@@ -67,8 +68,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 |------|------|------|
 | scope | string | `""` = 全量扫描，模块名 = 针对性扫描 |
 | mode | string | `"scan"` = 全量/定向扫描，`"instruct"` = 指令模式 |
-| dimensions | object | 四维度执行状态 |
-| dimensions[X] | string | `"pending"` 或 `"completed"`（X ∈ {freshness, coverage, integrity, consistency}） |
+| dimensions | object | 五维度执行状态 |
+| dimensions[X] | string | `"pending"` 或 `"completed"`（X ∈ {freshness, coverage, integrity, consistency, factual}） |
 | findings | finding[] | 累积发现 |
 | suggestedGuidelines | object[] | guideline 候选列表 |
 
@@ -121,7 +122,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field issues 
 
 ## 5. 维度检查
 
-对 wiki.lint.json 中每个 pending 维度，按顺序执行：freshness → coverage → integrity → consistency。每完成一个维度即时保存。
+对 wiki.lint.json 中每个 pending 维度，按顺序执行：freshness → coverage → integrity → consistency → factual。每完成一个维度即时保存。
 
 ### 5.1. freshness — 源码路径有效性
 
@@ -164,15 +165,43 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 - 同一概念在不同页面术语一致
 - 页面内容匹配其层级（如 flow 页面不应描述单 feature 的内部实现）
 - 交叉引用有效：depends 引用目标页面存在；下级引用目标页面存在
-- **CODE 验证**：对 feature 页面的 `source` 字段引用的源码文件，抽样读取关键部分（导出签名、类型定义），与 wiki 描述比对。描述与源码不一致 → 标记为 finding，severity 按偏差程度定（high: 核心逻辑错误；medium: 细节不准确；low: 表述可优化）
 
-### 5.5. 即时保存
+### 5.5. factual — 事实性验证
+
+对 feature 页面中出现的可验证事实与源码交叉比对。这是 wiki 质量保障的关键维度——结构性正确但事实性失实是最危险的一类错误。
+
+**前置过滤**：跳过 freshness 维度已标记所有 source 文件不存在的 feature 页面（这些页面已有 freshness finding，无需重复验证）。
+
+**scope 处理**：非全量扫描时（指定模块名），使用 query-wiki.js 查找该模块的 features 字段，仅验证关联的 feature 页面。
+
+**常量值提取与比对**：
+
+1. 从 wiki 正文中提取引用的常量值（在代码块和描述文本中搜索大写标识符 + 数值的组合，如 `MAX_SIZE = 1024`、`FEC_MAX = 3`）
+2. 对每个命中的 feature 页面，Grep 其 source 文件中的 `static final` / `const` / `enum` / `readonly` 声明
+3. 比对策略：
+   - wiki 中的数值与源码一致 → 跳过
+   - wiki 中的数值与源码不一致 → finding，severity: high，fixType: content，fixPlan: "将 wiki 中的值从 <旧值> 更新为源码中的 <新值>"
+   - wiki 引用的常量名在源码中不存在 → finding，severity: medium，fixType: content，fixPlan: "常量 <名称> 可能已删除或重命名，需确认"
+
+**类名/接口引用验证**：
+
+1. 使用 query-wiki.js --fulltext 搜索 wiki 中引用的类名和接口名（反引号内的标识符、代码块中的类型名）
+2. Grep 验证是否在 source 文件或项目源码中存在定义
+3. 不存在 → finding，severity: high（可能是已删除的类），fixType: content，fixPlan: "类 <名称> 在源码中不存在，可能已删除或重命名"
+
+**方法签名验证**（抽样）：
+
+1. 对 wiki 正文中描述的关键方法（在代码块或描述中明确提及的方法名）
+2. Grep source 文件中对应的方法签名
+3. 参数数量/类型/返回值不匹配 → finding，severity: medium，fixType: content
+
+### 5.6. 即时保存
 
 每完成一个维度，追加 findings 并保存 wiki.lint.json。每条 finding 包含：dimension、severity（high/medium/low）、page、description、fixType（safe/content/none）、fixPlan。safe 类型直接修复（更新页面内容和 frontmatter）。
 
 确保中断后已完成的维度结果不丢失。
 
-### 5.6. Guidelines 提炼
+### 5.7. Guidelines 提炼
 
 分析所有 findings 中的重复模式：
 
@@ -187,7 +216,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
    - 目标页面 guidelines 总数 > 10 → 建议精简
 5. 追加到 wiki.lint.json.suggestedGuidelines（与步骤 4 中 `[guideline]` issues 合并）
 
-### 5.7. 指令模式执行
+### 5.8. 指令模式执行
 
 当 mode == "instruct" 时，在维度检查和 guidelines 提炼完成后执行：
 
@@ -212,7 +241,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 
 ### 6.3. 输出结构化报告
 
-按四个维度组织输出，safe 标注"已修复"。每个维度列出 findings。
+按五个维度组织输出，safe 标注"已修复"。每个维度列出 findings。
 
 ### 6.4. 内容修复确认
 

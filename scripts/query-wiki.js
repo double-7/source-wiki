@@ -46,6 +46,11 @@
  *   --dump               输出所有页面的完整 frontmatter，忽略其他过滤条件。
  *                        用于全量快照场景（lint 全量扫描、调试）。
  *                        输出包含 path、frontmatter、type 三个字段。
+ *
+ *   --fulltext <keyword> 全文搜索模式。搜索所有 frontmatter 字段值和 markdown 正文内容。
+ *                        无需搭配 --field，忽略 --type 以外的其他过滤选项。
+ *                        返回匹配页面列表，每条包含 path、frontmatter、type、matches。
+ *                        matches 为匹配片段数组（最多 3 条，每条含 field/line/snippet）。
  */
 
 const fs = require('fs');
@@ -74,10 +79,27 @@ const containsVal = getOpt('--contains');
 const equalsVal = getOpt('--equals');
 const notEmptyOpt = argv.includes('--not-empty');
 const dumpOpt = argv.includes('--dump');
+const fulltextVal = getOpt('--fulltext');
 
 if (!wikiDir) {
   process.stderr.write('Usage: query-wiki.js --dir <wiki-dir> [options]\n');
   process.exit(1);
+}
+
+// ── 参数冲突检测 ───────────────────────────────────
+if (argv.includes('--fulltext') && fulltextVal === null) {
+  process.stderr.write('Error: --fulltext requires a keyword argument\n');
+  process.exit(1);
+}
+if (fulltextVal !== null) {
+  if (fulltextVal.trim() === '') {
+    process.stderr.write('Error: --fulltext keyword must be non-empty\n');
+    process.exit(1);
+  }
+  if (fieldOpt || containsVal !== null || equalsVal !== null || notEmptyOpt || dumpOpt) {
+    process.stderr.write('Error: --fulltext cannot be combined with --field, --contains, --equals, --not-empty, or --dump\n');
+    process.exit(1);
+  }
 }
 
 // ── Frontmatter 提取 ───────────────────────────────
@@ -133,6 +155,46 @@ function matchField(value) {
   return true;
 }
 
+// ── 全文搜索 ───────────────────────────────────────
+function fulltextSearch(content, keyword) {
+  const MAX_SNIPPETS = 3;
+  const CONTEXT_CHARS = 40;
+  const snippets = [];
+
+  // Strip UTF-8 BOM if present (consistent with extractFrontmatter)
+  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+
+  const kw = keyword.toLowerCase();
+
+  // 搜索 frontmatter 部分
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const fmLineCount = fmMatch ? fmMatch[0].split(/\r?\n/).length : 0;
+  if (fmMatch) {
+    const fmLines = fmMatch[1].split(/\r?\n/);
+    for (let i = 0; i < fmLines.length && snippets.length < MAX_SNIPPETS; i++) {
+      if (fmLines[i].toLowerCase().includes(kw)) {
+        snippets.push({ field: 'frontmatter', line: i + 2, snippet: fmLines[i].trim() });
+      }
+    }
+  }
+
+  // 搜索正文部分（跳过 frontmatter）
+  const bodyStart = fmMatch ? fmMatch[0].length : 0;
+  const body = content.slice(bodyStart);
+  const bodyLines = body.split(/\r?\n/);
+  for (let i = 0; i < bodyLines.length && snippets.length < MAX_SNIPPETS; i++) {
+    const idx = bodyLines[i].toLowerCase().indexOf(kw);
+    if (idx !== -1) {
+      const start = Math.max(0, idx - CONTEXT_CHARS);
+      const end = Math.min(bodyLines[i].length, idx + keyword.length + CONTEXT_CHARS);
+      const snippet = (start > 0 ? '...' : '') + bodyLines[i].slice(start, end) + (end < bodyLines[i].length ? '...' : '');
+      snippets.push({ field: 'body', line: fmLineCount + i + 1, snippet: snippet.trim() });
+    }
+  }
+
+  return snippets;
+}
+
 // ── 主流程 ─────────────────────────────────────────
 const absWikiDir = path.resolve(wikiDir);
 const files = scanDir(absWikiDir);
@@ -160,6 +222,20 @@ for (const full of files) {
   let content;
   try { content = fs.readFileSync(full, 'utf-8'); }
   catch (e) { errors.push({ path: rel, error: `read failed: ${e.message}` }); continue; }
+
+  // fulltext 模式：搜索 frontmatter 字段 + 正文
+  if (fulltextVal !== null) {
+    const snippets = fulltextSearch(content, fulltextVal);
+    if (snippets.length > 0) {
+      const fm = extractFrontmatter(content);
+      if (fm && fm.__error) {
+        errors.push({ path: rel, error: `invalid frontmatter: ${fm.__error}` });
+      } else {
+        matches.push({ path: rel, frontmatter: fm || {}, type: ptype, matches: snippets });
+      }
+    }
+    continue;
+  }
 
   const fm = extractFrontmatter(content);
   if (!fm) { errors.push({ path: rel, error: 'no frontmatter found' }); continue; }

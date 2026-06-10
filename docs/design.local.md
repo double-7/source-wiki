@@ -14,6 +14,7 @@
 | 结构 > 完美 | 骨架正确比细节准确更重要，细节由人校正 |
 | 可校正 > 自洽 | 生成的内容应易于定位和修改 |
 | 确定性 > 推理 | Hook 和脚本执行固定规则，LLM 负责推理，两者不交叉 |
+| 可验证 > 推测 | wiki 中的事实性内容（常量值、方法签名、类引用）应可从源码验证，不依赖 LLM 推测 |
 
 ### 1.3 三层架构
 
@@ -197,7 +198,7 @@ Frontmatter 格式限制为已知子集：扁平 key-value，值类型 string / 
 | Schema | 知识模型、页面规范、共享规则、临时文件通用规范 | `schemas/wiki-schema.md` | 所有 SKILL.md 运行时加载 |
 | init | 全量扫描→创建 wiki（三模式：覆盖/参考/重定向 ingest） | `skills/init/SKILL.md` | 用户 `/sw:init` |
 | ingest | 变更检测→影响分析→逐 target 处理（direct/indirect/intent）+ guidelines 提取，支持参数和非交互模式 | `skills/ingest/SKILL.md` | 用户 `/sw:ingest` |
-| lint | 四维度健康检查 + guidelines 提炼 + 指令模式 | `skills/lint/SKILL.md` | 用户 `/sw:lint` |
+| lint | 五维度健康检查（含事实性验证）+ guidelines 提炼 + 指令模式 | `skills/lint/SKILL.md` | 用户 `/sw:lint` |
 | query | 知识检索→回答→可能沉淀 | `skills/query/SKILL.md` | 用户 `/sw:query` |
 | Templates | 9 种页面模板 | `templates/*.md` | init/query 创建页面时加载 |
 | Hook | 写入校验（frontmatter + 临时文件） | `hooks/wiki-hook.js` | Claude Code 自动触发 |
@@ -293,3 +294,6 @@ my-agent-plugin/
 | 33 | 非交互模式保守策略（`--auto` 下 indirect 不修改页面） | indirect 缺乏直接证据，自动化处理风险高，交由 lint 更安全 | 全量自动处理 |
 | 34 | Diff 策略统一 `git diff <anchor>`（含 working tree） | 匹配"改完→同步→一起提交"工作流 | 三级策略（committed/staged/working tree） |
 | 35 | Guidelines 老化/死亡为愿景性描述，lint 一致性检查是其唯一实际执行机制 | 避免过度工程；init/ingest 冲突检测 + lint 一致性检查已覆盖核心场景 | 每次 lint 全量比对所有 guidelines 与 CODE |
+| 36 | Lint 新增 factual 维度（事实性验证） | 常量值错误是最常见且最危险的 wiki 问题（反馈实战发现 3 处常量值错误）；系统性提取-比对机制优于 consistency 的抽样验证 | 扩展 consistency 维度的 CODE 验证 |
+| 37 | Init 关键常量采集 + Ingest 常量值变更检测 | wiki 从创建起应有可验证的事实锚点；ingest 应感知常量值变更触发关联页面更新 | init 只提取结构不提取常量值 |
+| 38 | query-wiki.js --fulltext 全文搜索 | 跨字段全文搜索是高频查询场景（如搜索引用了某类的所有页面） | 仅支持单字段查询 |

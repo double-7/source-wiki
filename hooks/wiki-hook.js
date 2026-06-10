@@ -110,7 +110,7 @@ function validateLint(json) {
   if (typeof json.dimensions !== 'object' || Array.isArray(json.dimensions) || json.dimensions === null) {
     e.push('dimensions must be an object');
   } else {
-    for (const d of ['freshness', 'coverage', 'integrity', 'consistency']) {
+    for (const d of ['freshness', 'coverage', 'integrity', 'consistency', 'factual']) {
       if (!(d in json.dimensions)) e.push(`dimensions missing key: ${d}`);
       else if (json.dimensions[d] !== 'pending' && json.dimensions[d] !== 'completed') {
         e.push(`dimensions.${d} must be "pending" or "completed"`);
