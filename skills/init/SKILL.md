@@ -181,6 +181,7 @@ AskUserQuestion 展示模块划分方案：
 
 feature 页面的 `source` 字段填充映射的源码文件路径。
 module 页面的 `features` 字段填充 `[[features/页面名]]` 双链数组。
+module 页面的 `depends` 字段：如果 §4.1 分析中发现了对其他模块的依赖（import/export 关系），填充 `[[modules/模块名]]` 双链数组。
 
 ### 4.5. 自检
 
@@ -222,7 +223,7 @@ pending 为空，进入步骤 5。
 
 ### 5.2. 创建 flow 页面
 
-用户确认后，读取 `${CLAUDE_PLUGIN_ROOT}/templates/flow.md`，创建 flow 页面。
+用户确认后，读取 `${CLAUDE_PLUGIN_ROOT}/templates/flow.md`，创建 flow 页面（frontmatter 必需：title、created、updated、tags；可选：modules、features、depends、guidelines、issues）。
 
 ### 5.3. 推断 architecture 页面并确认
 
@@ -243,9 +244,9 @@ pending 为空，进入步骤 5。
 用户确认后：
 1. 读取对应的 `${CLAUDE_PLUGIN_ROOT}/templates/` 模板
 2. **回读源码**填充细节（如 api.md 需要读取路由定义，deployment.md 需要读取 Dockerfile 等）
-3. 有源码证据的章节正常填充；无源码证据但模板要求的章节直接删除该章节；整个页面无足够信息则提示用户
-4. 创建 architecture 页面（overview.md 必选，其他按确认结果）
-5. overview.md 的 `modules` 字段必须填充所有已创建模块的双链（如 `[[modules/auth]]`），不得留空
+3. 有源码证据的章节正常填充；无源码证据但模板要求的正文章节直接删除（不影响 frontmatter 关系字段）；整个页面无足够信息则提示用户
+4. 创建 architecture 页面（frontmatter 必需：title、created、updated、tags；可选：modules、flows、features、depends、guidelines、issues）
+5. overview.md 的 `modules` 字段必须填充所有已创建模块的双链（如 `[[modules/auth]]`），`flows` 字段填充所有已创建 flow 的双链，不得留空
 
 ### 5.5. 创建 index.md、log.md、.gitignore 及空目录
 
