@@ -13,11 +13,11 @@ user-invocable: true
 
 读取 `${CLAUDE_PLUGIN_ROOT}/schemas/wiki-schema.md` 加载共享规则。
 
-## 2. 互斥检查
+## 2. 前置检查
 
 Glob `docs/wiki/wiki.*.json`：
-- 有其他命令的临时文件 → 警告"wiki 可能处于不完整状态，结果可能不准确"，继续执行
-- 无临时文件 → 正常执行
+- 有其他命令的临时文件 → 警告"wiki 正在被其他命令修改，跳过所有页面修改操作"，继续执行（仅读取和回答，不执行 inline fix 或写 issues）
+- 无临时文件 → 确认 docs/wiki/ 存在且有页面；不存在 → 报错"请先运行 `/sw:init`"
 
 ## 3. 查询流程
 
@@ -98,7 +98,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field source 
 
 ### 4.3. 用户确认沉淀后
 
-**新增页面**——读取 `${CLAUDE_PLUGIN_ROOT}/templates/query.md`，基于模板创建页面（含完整 frontmatter），更新 index.md。
+**新增页面**——读取 `${CLAUDE_PLUGIN_ROOT}/templates/query.md`，在 `docs/wiki/queries/` 目录下创建页面（含完整 frontmatter）。在 index.md 的"查询沉淀"章节添加新页面的双链引用（格式：`- [[queries/页面名]] — 一句话摘要`），如该章节显示"尚无页面"则替换占位文本。
 
 **更新已有页面**——将内容写入目标页面，更新 frontmatter `updated`。
 
