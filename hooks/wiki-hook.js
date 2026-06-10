@@ -38,15 +38,20 @@ function route(normalized) {
   if (wikiIdx === -1) return null;
   const rel = normalized.slice(wikiIdx + 'docs/wiki/'.length);
 
-  // 排除 log.md 和未识别的临时文件
+  // 排除 log.md 和已知的临时文件
   if (rel === 'log.md') return null;
-  if (/^wiki\.\w+\.json$/.test(rel)) return null;
+  if (/^wiki\.(init|ingest|lint)\.json$/.test(rel)) return null;
 
   // index.md
   if (rel === 'index.md') return { kind: 'fm', type: 'index' };
 
-  // 类型目录：精确匹配第一路径段
-  const firstSeg = rel.split('/')[0];
+  // 非 .md 文件跳过 frontmatter 校验
+  if (!rel.endsWith('.md')) return null;
+
+  // 类型目录：精确匹配第一路径段（扁平结构，仅允许一层）
+  const segs = rel.split('/');
+  if (segs.length !== 2) return null; // 只允许 dir/file.md，不允许嵌套
+  const firstSeg = segs[0];
   for (const [t, d] of Object.entries(TYPE_DIR)) {
     if (firstSeg === d) return { kind: 'fm', type: t };
   }
@@ -67,6 +72,7 @@ function validateInit(json) {
       if (typeof v !== 'object' || Array.isArray(v) || v === null) { e.push(`plan["${k}"] must be an object`); continue; }
       if (typeof v.source !== 'string') e.push(`plan["${k}"].source must be a string`);
       if (!Array.isArray(v.features)) e.push(`plan["${k}"].features must be an array`);
+      else { for (const f of v.features) { if (typeof f !== 'string') e.push(`plan["${k}"].features elements must be strings`); break; } }
       if ('keyFiles' in v) {
         if (!Array.isArray(v.keyFiles)) { e.push(`plan["${k}"].keyFiles must be an array`); }
         else { for (const f of v.keyFiles) { if (typeof f !== 'string') e.push(`plan["${k}"].keyFiles elements must be strings`); } }
@@ -91,9 +97,9 @@ function validateIngest(json) {
     for (let i = 0; i < json[field].length; i++) {
       const t = json[field][i];
       if (typeof t !== 'object' || Array.isArray(t) || t === null) { e.push(`${field}[${i}] must be an object`); continue; }
-      if (typeof t.id !== 'string') e.push(`${field}[${i}].id must be a string`);
+      if (typeof t.id !== 'string' || t.id.trim() === '') e.push(`${field}[${i}].id must be a non-empty string`);
       if (!targetTypes.has(t.type)) e.push(`${field}[${i}].type must be "direct", "indirect", or "intent"`);
-      if (typeof t.reason !== 'string') e.push(`${field}[${i}].reason must be a string`);
+      if (typeof t.reason !== 'string' || t.reason.trim() === '') e.push(`${field}[${i}].reason must be a non-empty string`);
     }
   }
   return e;
@@ -181,13 +187,22 @@ function validateFrontmatter(fm, pageType) {
   if ('title' in fm && (typeof fm.title !== 'string' || fm.title.trim() === ''))
     e.push('title must be a non-empty string');
 
-  // ISO 8601 秒级时间戳
-  const isoRe = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+  // ISO 8601 秒级时间戳（Date.toISOString() 产生 .000Z，需兼容）
+  const isoRe = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
   for (const f of ['created', 'updated']) {
     if (f in fm) {
-      if (fm[f] instanceof Date) continue; // js-yaml 已解析为有效时间戳
-      if (!isoRe.test(String(fm[f])))
-        e.push(`invalid ${f}: expected ISO 8601 (e.g. 2026-04-21T14:30:00Z), got "${fm[f]}"`);
+      // js-yaml 可能将日期解析为 Date 对象，统一转为 ISO 字符串校验格式
+      const val = fm[f] instanceof Date ? fm[f].toISOString() : String(fm[f]);
+      if (!isoRe.test(val))
+        e.push(`invalid ${f}: expected ISO 8601 seconds-level (e.g. 2026-04-21T14:30:00Z), got "${val}"`);
+    }
+  }
+  // 语义校验：updated 应 >= created
+  if ('created' in fm && 'updated' in fm) {
+    const c = fm.created instanceof Date ? fm.created : new Date(fm.created);
+    const u = fm.updated instanceof Date ? fm.updated : new Date(fm.updated);
+    if (!isNaN(c.getTime()) && !isNaN(u.getTime()) && u < c) {
+      e.push('updated must be >= created');
     }
   }
 
@@ -197,7 +212,7 @@ function validateFrontmatter(fm, pageType) {
       if (!Array.isArray(fm[f])) { e.push(`${f} must be an array`); }
       else { for (const el of fm[f]) {
         if (typeof el !== 'string' || el.trim() === '')
-          { e.push(`${f} elements must be non-empty strings`); break; }
+          { e.push(`${f} elements must be non-empty strings`); }
       }}
     }
   }
@@ -239,7 +254,8 @@ function validateFrontmatter(fm, pageType) {
 
 function validateLinkArray(arr, fieldName, expectedDir, errors) {
   if (!Array.isArray(arr)) { errors.push(`${fieldName} must be an array`); return; }
-  const re = new RegExp(`^\\[\\[${expectedDir}/[a-z0-9-]+\\]\\]$`);
+  // 注意：必须使用 \\\\ 在 RegExp 构造器中生成字面量 \\[
+  const re = new RegExp(`^\\[\\[${expectedDir}/[a-z0-9][a-z0-9-]*\\]\\]$`);
   for (const v of arr) {
     if (typeof v !== 'string' || !re.test(v)) {
       errors.push(`invalid ${fieldName} format: expected [[${expectedDir}/name]], got "${v}"`);
@@ -263,7 +279,7 @@ function requireArr(parent, key, itemType, errors) {
 function extractFrontmatter(content) {
   // 剥离 UTF-8 BOM
   if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
-  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n?---/);
   if (!m) return null;
   try {
     const r = jsYaml.load(m[1]);
@@ -317,7 +333,7 @@ async function main() {
     // 文件名规范校验（index.md 除外）
     if (r.type !== 'index') {
       const fn = filePath.split('/').pop();
-      if (!/^[a-z0-9-]+\.md$/.test(fn))
+      if (!/^[a-z0-9][a-z0-9-]*\.md$/.test(fn))
         { fail(`wiki page filename must be lowercase with hyphens, got "${fn}"`); return; }
     }
     const fm = extractFrontmatter(content);
