@@ -107,8 +107,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field issues 
 对每个有 issues 的页面，逐个验证：
 
 - **源码可验证且属于机械修正**（见 wiki-schema.md §3.5）→ 修复并清除 issue
-- **源码可验证但属于内容更新** → 升级为 finding（fixType: content），追加到 wiki.lint.json 的 findings
-- **需要用户判断** → 升级为 finding（fixType: content），追加到 wiki.lint.json 的 findings
+- **源码可验证但属于内容更新** → 升级为 finding（fixType: content, fixPlan: 从 issue 描述推断修复方向），追加到 wiki.lint.json 的 findings
+- **需要用户判断** → 升级为 finding（fixType: content, fixPlan: "需用户确认后执行"），追加到 wiki.lint.json 的 findings
 - **问题已不存在** → 直接清除 issue
 - **Issue 含 `[guideline]` 前缀** → guideline 候选处理：提取 issue 中描述的模式，转为 suggestedGuideline 追加到 wiki.lint.json，清除该 issue
 
@@ -119,6 +119,8 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --field issues 
 4. 更新 frontmatter `updated` 为当前秒级 ISO 时间戳
 
 仅写 issues 到 frontmatter（不做内容修改）时，不更新 `updated`。
+
+**保存**：issues 消费完成后，保存 wiki.lint.json 确保升级的 findings 不丢失。
 
 ## 5. 维度检查
 
@@ -135,14 +137,14 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --type feature
 Glob 验证每个 source 路径是否存在。不存在的标记为 finding：
 
 - severity: high
-- fixType: none
-- fixPlan: "源码文件已删除或移动"
+- fixType: content
+- fixPlan: 尝试区分：`git log --follow -- <path>` 检测是否为移动（有重命名记录）→ fixPlan: "更新 source 路径为 <新路径>"；无法检测移动 → fixPlan: "源码文件已删除，确认后从 source 中移除"
 
 ### 5.2. coverage — 覆盖完整性
 
 - 扫描所有 wiki 页面文件
 - 检查：正文中 `[[dir/name]]` 双链都有对应的实际文件
-- 检查：无孤立页面（每个页面至少被一个其他页面或 index.md 引用）
+- 检查：无孤立页面（每个页面至少被一个其他页面或 index.md 引用。排除 index.md 本身和 log.md — 前者是系统锚点，后者不受页面规范约束）
 - 缺失的标记为 finding，severity: medium
 - **遗漏检测**：扫描源码目录，收集未被任何 feature 页面 `source` 字段覆盖的源码文件。未覆盖文件聚集在同一目录（≥ 3 个）→ 标记为 finding，severity: medium，建议新建 feature 或扩展已有 feature。零散文件可忽略。
 
@@ -193,7 +195,7 @@ node ${CLAUDE_PLUGIN_ROOT}/scripts/query-wiki.js --dir docs/wiki --dump
 
 1. 对 wiki 正文中描述的关键方法（在代码块或描述中明确提及的方法名）
 2. Grep source 文件中对应的方法签名
-3. 参数数量/类型/返回值不匹配 → finding，severity: medium，fixType: content
+3. 参数数量/类型/返回值不匹配 → finding，severity: medium，fixType: content，fixPlan: "将 wiki 中的方法签名描述更新为与源码一致"
 
 ### 5.6. 即时保存
 
