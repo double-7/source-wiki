@@ -5,13 +5,14 @@ updated: 2026-04-21T00:00:00Z
 tags: []
 depends: []
 modules: []
-features: ["[[features/feature-a]]", "[[features/feature-b]]"]
+features: []
 ---
 
 # {{流程名}}
 
-> 核心章节（概述、步骤详解、涉及的模块、涉及的功能）必须包含。
-> 扩展章节仅在源码有明确证据时添加，无证据不要创建。
+> 核心章节（概述、步骤详解）必须包含。
+> 扩展章节（涉及的模块、涉及的功能）在流程涉及对应类型时添加。
+> 其他扩展章节仅在源码有明确证据时添加，无证据不要创建。
 > 证据判定：✅ 源码中存在对应方法/类/常量 ｜ ✅ 配置文件中存在对应字段 ｜ ❌ 仅凭命名推测 ｜ ❌ 从其他页面推断
 
 ## 概述
@@ -24,7 +25,7 @@ features: ["[[features/feature-a]]", "[[features/feature-b]]"]
 
 - **触发条件**：什么触发了这一步
 - **处理逻辑**：这一步做了什么
-- **涉及的功能**：[[features/feature-a]]、[[features/feature-b]]
+- **涉及的功能**：[[features/feature-name]]
 - **输出/状态变化**：这一步产生了什么变化
 
 ### 2. 步骤名称
@@ -33,17 +34,19 @@ features: ["[[features/feature-a]]", "[[features/feature-b]]"]
 
 ## 涉及的模块
 
+> 【扩展章节】流程涉及具体模块时添加，无模块参与时不要创建此章节。
+
 | 模块 | 角色 |
 |------|------|
 | [[modules/模块A]] | 提供哪些能力参与此流程 |
-| [[modules/模块B]] | 提供哪些能力参与此流程 |
 
 ## 涉及的功能（Features）
 
+> 【扩展章节】流程涉及具体 feature 时添加，无具体 feature 参与时不要创建此章节。
+
 | Feature | 在流程中的角色 |
 |---------|----------------|
-| [[features/feature-a]] | 负责什么处理 |
-| [[features/feature-b]] | 负责什么处理 |
+| [[features/feature-name]] | 负责什么处理 |
 
 > 列出此流程中实际执行工作的 feature 页面。Flow 本身不描述实现细节，实现细节在对应的 feature 页面中。
 
