@@ -205,7 +205,7 @@ function fulltextSearch(content, keyword) {
   const kw = keyword.toLowerCase();
 
   // 搜索 frontmatter 部分
-  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n?---/);
   const fmLineCount = fmMatch ? fmMatch[0].split(/\r?\n/).length : 0;
   if (fmMatch) {
     const fmLines = fmMatch[1].split(/\r?\n/);

@@ -72,7 +72,7 @@ function validateInit(json) {
       if (typeof v !== 'object' || Array.isArray(v) || v === null) { e.push(`plan["${k}"] must be an object`); continue; }
       if (typeof v.source !== 'string') e.push(`plan["${k}"].source must be a string`);
       if (!Array.isArray(v.features)) e.push(`plan["${k}"].features must be an array`);
-      else { for (const f of v.features) { if (typeof f !== 'string') e.push(`plan["${k}"].features elements must be strings`); break; } }
+      else { for (const f of v.features) { if (typeof f !== 'string') { e.push(`plan["${k}"].features elements must be strings`); break; } } }
       if ('keyFiles' in v) {
         if (!Array.isArray(v.keyFiles)) { e.push(`plan["${k}"].keyFiles must be an array`); }
         else { for (const f of v.keyFiles) { if (typeof f !== 'string') e.push(`plan["${k}"].keyFiles elements must be strings`); } }
