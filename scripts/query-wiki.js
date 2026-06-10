@@ -101,26 +101,61 @@ if (fulltextVal !== null) {
     process.exit(1);
   }
 }
+// 缺失参数检测
+if (argv.includes('--type') && typeOpt === null) {
+  process.stderr.write('Error: --type requires a type argument\n');
+  process.exit(1);
+}
+if (argv.includes('--field') && fieldOpt === null) {
+  process.stderr.write('Error: --field requires a field name argument\n');
+  process.exit(1);
+}
+if (argv.includes('--contains') && containsVal === null) {
+  process.stderr.write('Error: --contains requires a value argument\n');
+  process.exit(1);
+}
+if (argv.includes('--equals') && equalsVal === null) {
+  process.stderr.write('Error: --equals requires a value argument\n');
+  process.exit(1);
+}
+if ((containsVal !== null || equalsVal !== null || notEmptyOpt) && !fieldOpt) {
+  process.stderr.write('Error: --contains, --equals, and --not-empty require --field\n');
+  process.exit(1);
+}
+const filterCount = (containsVal !== null ? 1 : 0) + (equalsVal !== null ? 1 : 0) + (notEmptyOpt ? 1 : 0);
+if (filterCount > 1) {
+  process.stderr.write('Error: --contains, --equals, and --not-empty are mutually exclusive\n');
+  process.exit(1);
+}
 
 // ── Frontmatter 提取 ───────────────────────────────
 function extractFrontmatter(content) {
   // Strip UTF-8 BOM if present
   if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
-  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n?---/);
   if (!m) return null;
-  try { return jsYaml.load(m[1]); }
-  catch (e) { return { __error: e.message }; }
+  try {
+    const r = jsYaml.load(m[1]);
+    if (r === undefined || r === null) return {};
+    if (typeof r !== 'object' || Array.isArray(r)) return {};
+    return r;
+  }
+  catch (e) { return { __yaml_parse_error__: e.message }; }
 }
 
-// ── 递归扫描 .md 文件（排除 log.md） ───────────────
-function scanDir(dir) {
+// ── 递归扫描 .md 文件（仅排除根目录 log.md） ───────
+function scanDir(dir, rootDir) {
+  const isRoot = dir === rootDir;
   const results = [];
   if (!fs.existsSync(dir)) return results;
+  if (!fs.statSync(dir).isDirectory()) return results;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      results.push(...scanDir(full));
-    } else if (entry.name.endsWith('.md') && entry.name !== 'log.md') {
+      try { results.push(...scanDir(full, rootDir)); }
+      catch (e) { /* skip unreadable directories */ }
+    } else if (entry.name.toLowerCase().endsWith('.md')) {
+      if (isRoot && entry.name === 'log.md') continue;
       results.push(full);
     }
   }
@@ -137,14 +172,17 @@ function pageType(rel) {
 // ── 字段过滤 ───────────────────────────────────────
 function matchField(value) {
   if (value === undefined || value === null) return false;
+  // 将 Date 对象转为 ISO 字符串以支持日期字段查询
+  const normalize = (v) => v instanceof Date ? v.toISOString() : v;
   if (containsVal !== null) {
-    if (Array.isArray(value)) return value.some(v => String(v).includes(containsVal));
-    if (typeof value === 'string') return value.includes(containsVal);
-    return false;
+    const norm = normalize(value);
+    if (Array.isArray(norm)) return norm.some(v => String(normalize(v)).includes(containsVal));
+    return String(norm).includes(containsVal);
   }
   if (equalsVal !== null) {
-    if (Array.isArray(value)) return value.some(v => String(v) === equalsVal);
-    return String(value) === equalsVal;
+    const norm = normalize(value);
+    if (Array.isArray(norm)) return norm.some(v => String(normalize(v)) === equalsVal);
+    return String(norm) === equalsVal;
   }
   if (notEmptyOpt) {
     if (value === undefined || value === null) return false;
@@ -178,9 +216,9 @@ function fulltextSearch(content, keyword) {
     }
   }
 
-  // 搜索正文部分（跳过 frontmatter）
+  // 搜索正文部分（跳过 frontmatter，去除前导换行避免幻影空行）
   const bodyStart = fmMatch ? fmMatch[0].length : 0;
-  const body = content.slice(bodyStart);
+  const body = content.slice(bodyStart).replace(/^\r?\n/, '');
   const bodyLines = body.split(/\r?\n/);
   for (let i = 0; i < bodyLines.length && snippets.length < MAX_SNIPPETS; i++) {
     const idx = bodyLines[i].toLowerCase().indexOf(kw);
@@ -197,7 +235,11 @@ function fulltextSearch(content, keyword) {
 
 // ── 主流程 ─────────────────────────────────────────
 const absWikiDir = path.resolve(wikiDir);
-const files = scanDir(absWikiDir);
+if (!fs.existsSync(absWikiDir) || !fs.statSync(absWikiDir).isDirectory()) {
+  process.stderr.write('Error: --dir must be an existing directory: ' + absWikiDir + '\n');
+  process.exit(1);
+}
+const files = scanDir(absWikiDir, absWikiDir).sort();
 const matches = [];
 const errors = [];
 
@@ -228,8 +270,8 @@ for (const full of files) {
     const snippets = fulltextSearch(content, fulltextVal);
     if (snippets.length > 0) {
       const fm = extractFrontmatter(content);
-      if (fm && fm.__error) {
-        errors.push({ path: rel, error: `invalid frontmatter: ${fm.__error}` });
+      if (fm && fm.__yaml_parse_error__) {
+        errors.push({ path: rel, error: `invalid frontmatter: ${fm.__yaml_parse_error__}` });
       } else {
         matches.push({ path: rel, frontmatter: fm || {}, type: ptype, matches: snippets });
       }
@@ -239,7 +281,7 @@ for (const full of files) {
 
   const fm = extractFrontmatter(content);
   if (!fm) { errors.push({ path: rel, error: 'no frontmatter found' }); continue; }
-  if (fm.__error) { errors.push({ path: rel, error: `invalid frontmatter: ${fm.__error}` }); continue; }
+  if (fm.__yaml_parse_error__) { errors.push({ path: rel, error: `invalid frontmatter: ${fm.__yaml_parse_error__}` }); continue; }
 
   // dump 模式：包含所有有效 frontmatter 的页面
   if (dumpOpt) {
@@ -260,4 +302,9 @@ for (const full of files) {
   matches.push({ path: rel, frontmatter: fm, type: ptype });
 }
 
-process.stdout.write(JSON.stringify({ matches, errors }, null, 0) + '\n');
+try {
+  process.stdout.write(JSON.stringify({ matches, errors }, null, 0) + '\n');
+} catch (e) {
+  process.stderr.write('Error: failed to serialize results: ' + e.message + '\n');
+  process.exit(1);
+}
