@@ -191,16 +191,15 @@ function validateFrontmatter(fm, pageType) {
   const isoRe = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
   for (const f of ['created', 'updated']) {
     if (f in fm) {
-      // js-yaml 可能将日期解析为 Date 对象，统一转为 ISO 字符串校验格式
-      const val = fm[f] instanceof Date ? fm[f].toISOString() : String(fm[f]);
+      const val = String(fm[f]);
       if (!isoRe.test(val))
         e.push(`invalid ${f}: expected ISO 8601 seconds-level (e.g. 2026-04-21T14:30:00Z), got "${val}"`);
     }
   }
   // 语义校验：updated 应 >= created
   if ('created' in fm && 'updated' in fm) {
-    const c = fm.created instanceof Date ? fm.created : new Date(fm.created);
-    const u = fm.updated instanceof Date ? fm.updated : new Date(fm.updated);
+    const c = new Date(fm.created);
+    const u = new Date(fm.updated);
     if (!isNaN(c.getTime()) && !isNaN(u.getTime()) && u < c) {
       e.push('updated must be >= created');
     }
@@ -282,10 +281,10 @@ function extractFrontmatter(content) {
   const m = content.match(/^---\r?\n([\s\S]*?)\r?\n?---/);
   if (!m) return null;
   try {
-    const r = jsYaml.load(m[1]);
+    const r = jsYaml.load(m[1], { schema: jsYaml.JSON_SCHEMA });
     return (r === undefined || r === null) ? {} : r;
   }
-  catch (e) { return { __error: e.message }; }
+  catch (e) { return { __yaml_parse_error__: e.message }; }
 }
 
 // ── Hook 入口 ──────────────────────────────────────
@@ -338,7 +337,7 @@ async function main() {
     }
     const fm = extractFrontmatter(content);
     if (!fm) process.exit(0); // 无 frontmatter 的 .md 文件不校验
-    if (fm.__error) { fail(`invalid YAML frontmatter: ${fm.__error}`); return; }
+    if (fm.__yaml_parse_error__) { fail(`invalid YAML frontmatter: ${fm.__yaml_parse_error__}`); return; }
 
     const errors = validateFrontmatter(fm, r.type);
     if (errors.length) { fail(`frontmatter validation failed (${r.type}):\n${errors.map(x => '  - ' + x).join('\n')}`); return; }

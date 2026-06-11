@@ -135,7 +135,7 @@ function extractFrontmatter(content) {
   const m = content.match(/^---\r?\n([\s\S]*?)\r?\n?---/);
   if (!m) return null;
   try {
-    const r = jsYaml.load(m[1]);
+    const r = jsYaml.load(m[1], { schema: jsYaml.JSON_SCHEMA });
     if (r === undefined || r === null) return {};
     if (typeof r !== 'object' || Array.isArray(r)) return {};
     return r;
@@ -172,17 +172,13 @@ function pageType(rel) {
 // ── 字段过滤 ───────────────────────────────────────
 function matchField(value) {
   if (value === undefined || value === null) return false;
-  // 将 Date 对象转为 ISO 字符串以支持日期字段查询
-  const normalize = (v) => v instanceof Date ? v.toISOString() : v;
   if (containsVal !== null) {
-    const norm = normalize(value);
-    if (Array.isArray(norm)) return norm.some(v => String(normalize(v)).includes(containsVal));
-    return String(norm).includes(containsVal);
+    if (Array.isArray(value)) return value.some(v => String(v).includes(containsVal));
+    return String(value).includes(containsVal);
   }
   if (equalsVal !== null) {
-    const norm = normalize(value);
-    if (Array.isArray(norm)) return norm.some(v => String(normalize(v)) === equalsVal);
-    return String(norm) === equalsVal;
+    if (Array.isArray(value)) return value.some(v => String(v) === equalsVal);
+    return String(value) === equalsVal;
   }
   if (notEmptyOpt) {
     if (value === undefined || value === null) return false;
@@ -302,9 +298,4 @@ for (const full of files) {
   matches.push({ path: rel, frontmatter: fm, type: ptype });
 }
 
-try {
-  process.stdout.write(JSON.stringify({ matches, errors }, null, 0) + '\n');
-} catch (e) {
-  process.stderr.write('Error: failed to serialize results: ' + e.message + '\n');
-  process.exit(1);
-}
+process.stdout.write(JSON.stringify({ matches, errors }, null, 0) + '\n');
