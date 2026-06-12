@@ -18,13 +18,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const jsYaml = require(path.join(__dirname, '..', 'libs', 'js-yaml-4.1.1.min.js'));
-
-// ── 类型目录映射 ────────────────────────────────────
-const TYPE_DIR = {
-  feature: 'features', module: 'modules', flow: 'flows',
-  architecture: 'architectures', query: 'queries'
-};
+const { jsYaml, TYPE_DIRS, extractFrontmatter } = require(path.join(__dirname, '..', 'libs', 'wiki-utils.js'));
 
 // ── 路由：文件路径 → 校验类型 ───────────────────────
 function route(normalized) {
@@ -38,9 +32,8 @@ function route(normalized) {
   if (wikiIdx === -1) return null;
   const rel = normalized.slice(wikiIdx + 'docs/wiki/'.length);
 
-  // 排除 log.md 和已知的临时文件
+  // 排除 log.md
   if (rel === 'log.md') return null;
-  if (/^wiki\.(init|ingest|lint)\.json$/.test(rel)) return null;
 
   // index.md
   if (rel === 'index.md') return { kind: 'fm', type: 'index' };
@@ -52,7 +45,7 @@ function route(normalized) {
   const segs = rel.split('/');
   if (segs.length !== 2) return null; // 只允许 dir/file.md，不允许嵌套
   const firstSeg = segs[0];
-  for (const [t, d] of Object.entries(TYPE_DIR)) {
+  for (const [t, d] of Object.entries(TYPE_DIRS)) {
     if (firstSeg === d) return { kind: 'fm', type: t };
   }
   return null;
@@ -230,7 +223,7 @@ function validateFrontmatter(fm, pageType) {
   }
 
   // depends（平级引用，同类型目录；index 无目录映射，跳过）
-  const myDir = TYPE_DIR[pageType];
+  const myDir = TYPE_DIRS[pageType];
   if (myDir && 'depends' in fm) {
     validateLinkArray(fm.depends, 'depends', myDir, e);
   }
@@ -273,18 +266,6 @@ function requireArr(parent, key, itemType, errors) {
       if (typeof parent[key][i] !== 'string') errors.push(`${key}[${i}] must be a string`);
     }
   }
-}
-
-function extractFrontmatter(content) {
-  // 剥离 UTF-8 BOM
-  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
-  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n?---/);
-  if (!m) return null;
-  try {
-    const r = jsYaml.load(m[1], { schema: jsYaml.JSON_SCHEMA });
-    return (r === undefined || r === null) ? {} : r;
-  }
-  catch (e) { return { __yaml_parse_error__: e.message }; }
 }
 
 // ── Hook 入口 ──────────────────────────────────────

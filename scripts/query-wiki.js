@@ -55,15 +55,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const jsYaml = require(path.join(__dirname, '..', 'libs', 'js-yaml-4.1.1.min.js'));
-
-// ── 类型 ↔ 目录映射 ────────────────────────────────
-const TYPE_DIRS = {
-  feature: 'features', module: 'modules', flow: 'flows',
-  architecture: 'architectures', query: 'queries'
-};
-const DIR_TYPES = {};
-for (const [t, d] of Object.entries(TYPE_DIRS)) DIR_TYPES[d] = t;
+const { jsYaml, TYPE_DIRS, DIR_TYPES, extractFrontmatter } = require(path.join(__dirname, '..', 'libs', 'wiki-utils.js'));
 
 // ── 参数解析 ────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -87,10 +79,18 @@ if (!wikiDir) {
 }
 
 // ── 参数冲突检测 ───────────────────────────────────
-if (argv.includes('--fulltext') && fulltextVal === null) {
-  process.stderr.write('Error: --fulltext requires a keyword argument\n');
-  process.exit(1);
+function requireArg(flag, val, label) {
+  if (argv.includes(flag) && val === null) {
+    process.stderr.write(`Error: ${flag} requires a ${label} argument\n`);
+    process.exit(1);
+  }
 }
+requireArg('--fulltext', fulltextVal, 'keyword');
+requireArg('--type', typeOpt, 'type');
+requireArg('--field', fieldOpt, 'field name');
+requireArg('--contains', containsVal, 'value');
+requireArg('--equals', equalsVal, 'value');
+
 if (fulltextVal !== null) {
   if (fulltextVal.trim() === '') {
     process.stderr.write('Error: --fulltext keyword must be non-empty\n');
@@ -100,23 +100,6 @@ if (fulltextVal !== null) {
     process.stderr.write('Error: --fulltext cannot be combined with --field, --contains, --equals, --not-empty, or --dump\n');
     process.exit(1);
   }
-}
-// 缺失参数检测
-if (argv.includes('--type') && typeOpt === null) {
-  process.stderr.write('Error: --type requires a type argument\n');
-  process.exit(1);
-}
-if (argv.includes('--field') && fieldOpt === null) {
-  process.stderr.write('Error: --field requires a field name argument\n');
-  process.exit(1);
-}
-if (argv.includes('--contains') && containsVal === null) {
-  process.stderr.write('Error: --contains requires a value argument\n');
-  process.exit(1);
-}
-if (argv.includes('--equals') && equalsVal === null) {
-  process.stderr.write('Error: --equals requires a value argument\n');
-  process.exit(1);
 }
 if ((containsVal !== null || equalsVal !== null || notEmptyOpt) && !fieldOpt) {
   process.stderr.write('Error: --contains, --equals, and --not-empty require --field\n');
@@ -128,27 +111,12 @@ if (filterCount > 1) {
   process.exit(1);
 }
 
-// ── Frontmatter 提取 ───────────────────────────────
-function extractFrontmatter(content) {
-  // Strip UTF-8 BOM if present
-  if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
-  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n?---/);
-  if (!m) return null;
-  try {
-    const r = jsYaml.load(m[1], { schema: jsYaml.JSON_SCHEMA });
-    if (r === undefined || r === null) return {};
-    if (typeof r !== 'object' || Array.isArray(r)) return {};
-    return r;
-  }
-  catch (e) { return { __yaml_parse_error__: e.message }; }
-}
-
 // ── 递归扫描 .md 文件（仅排除根目录 log.md） ───────
 function scanDir(dir, rootDir) {
   const isRoot = dir === rootDir;
   const results = [];
-  if (!fs.existsSync(dir)) return results;
-  if (!fs.statSync(dir).isDirectory()) return results;
+  try { if (!fs.statSync(dir).isDirectory()) return results; }
+  catch { return results; }
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -231,13 +199,12 @@ function fulltextSearch(content, keyword) {
 
 // ── 主流程 ─────────────────────────────────────────
 const absWikiDir = path.resolve(wikiDir);
-if (!fs.existsSync(absWikiDir) || !fs.statSync(absWikiDir).isDirectory()) {
+try {
+  if (!fs.statSync(absWikiDir).isDirectory()) throw 0;
+} catch {
   process.stderr.write('Error: --dir must be an existing directory: ' + absWikiDir + '\n');
   process.exit(1);
 }
-const files = scanDir(absWikiDir, absWikiDir).sort();
-const matches = [];
-const errors = [];
 
 // 类型过滤预计算
 let typeDirPrefix = null;
@@ -250,11 +217,17 @@ if (typeOpt) {
   typeDirPrefix += '/';
 }
 
+// --type 时只扫描目标子目录，跳过无关文件
+const scanBase = typeDirPrefix ? path.join(absWikiDir, typeDirPrefix) : absWikiDir;
+const files = scanDir(scanBase, absWikiDir).sort();
+const matches = [];
+const errors = [];
+
 for (const full of files) {
   const rel = path.relative(absWikiDir, full).replace(/\\/g, '/');
   const ptype = pageType(rel);
 
-  // 类型过滤
+  // 类型过滤（scanBase 已缩小范围，此检查为安全兜底）
   if (typeDirPrefix && !rel.startsWith(typeDirPrefix)) continue;
 
   let content;
